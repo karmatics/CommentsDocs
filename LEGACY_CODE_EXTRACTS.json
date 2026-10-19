@@ -1,0 +1,211 @@
+{
+  "Comments.js": {
+    "size": 29099,
+    "lineCount": 972,
+    "constructorParams": "",
+    "methods": [
+      "constructor()",
+      "createPostBox(parentId, onPostCallback, onCancelCallback)",
+      "setCurrentUser(user)",
+      "toggleDebugMode(e)",
+      "toggleGlobalSortOrder(e)",
+      "_showTopLevelPostButton()",
+      "_showTopLevelPostBox()",
+      "_updatePostBoxHeader(headerElement)",
+      "_updateAllUserDisplays(userId, newDisplayName)",
+      "closeAllPopups()",
+      "setActiveReplyController(controller)",
+      "applyTheme(themeSettings)",
+      "showAuthDialog()",
+      "renderDemoBanner()",
+      "updateDemoBanner()",
+      "setDemoBannerTheme(themeName)",
+      "_applyDemoBannerTheme()",
+      "showDemoIncentivesPopup()"
+    ],
+    "preview": "\r\nclass Comments {\r\n  constructor() {\r\n    this.container = null;\r\n    this.commentView = null;\r\n    this.userManager = new UserManager();\r\n    this.styles = new CommentStyles();\r\n\r\n    this.serverAPI = new MockServerAPI();\r\n    this.apiMode = 'mock';\r\n\r\n    this.currentUser = null;\r\n    this.appContainer = null;\r\n    this.isDebugMode = false;\r\n    this.globalSortOrder = 'newest';\r\n    this.topLevelPostBoxContainer = null;\r\n    this.userAccountDialog = new UserAccountDialog(this);\r\n    this.activeReplyController = null;\r\n    this.threadId = 'main';\r\n\r\n    this.demoBannerWrapperElement = null;\r\n    this.demoBannerElement = null;\r\n    this.demoBannerTextElement = null;\r\n    this.demoBannerToggleElement = null;\r\n    this.demoBannerPopupOverlay = null;\r\n    this.realCommentThreshold = 3;\r\n    this.hasResolvedInitialApiMode = false;\r\n    this.demoBannerTheme = Math.random() < 0.5 ? 'blueprint' : 'sticky-note';\r\n    this.launchSwagImages = [\r\n      './launch-swag-key-labels.jpg',\r\n      './launch-swag-glowtunes-demo.jpg',\r\n    ];\r\n\r\n    this.toolbar = new CommentToolbar(this);\r\n  }\r\n\r\n  createPostBox(parentId, onPostCallback, onCancelCallback) {\r\n    const form = makeElement('form', { className: 'comment-post-box' });\r\n\r\n    if (this.currentUser) {\r"
+  },
+  "CommentNode.js": {
+    "size": 16238,
+    "lineCount": 530,
+    "constructorParams": "data, view, parent = null",
+    "methods": [
+      "constructor(data, view, parent = null)",
+      "render()",
+      "showReplyBox()",
+      "updateToggleIcon()",
+      "updateStyle()",
+      "toggleExpandCollapse(onComplete)",
+      "updateVisualState()",
+      "getConnectionPoint()",
+      "toggleRatingPanel(buttonElement)",
+      "sortChildren()",
+      "toggleChildSortOrder()",
+      "renderTemporaryReplyBox()",
+      "removeChild(childId)",
+      "setCollapsed(isCollapsed)",
+      "updateTextPreview()"
+    ],
+    "preview": "\r\nclass CommentNode {\r\n  constructor(data, view, parent = null) {\r\n    this.id = data.id;\r\n    this.userId = data.userId;\r\n    this.text = data.text;\r\n    this.timestamp = data.timestamp ? new Date(data.timestamp) : new Date();\r\n    this.isTemporary = data.isTemporary || false;\r\n    this.isDeleted = data.isDeleted || false;\r\n    this.isCollapsed = data.isCollapsed || false;\r\n\r\n    this.children = (data.children || []).map(\r\n      (childData) => new CommentNode(childData, view, this)\r\n    );\r\n\r\n    this.view = view;\r\n    this.parent = parent;\r\n    this.isExpanded = data.isExpanded !== undefined ? data.isExpanded : true;\r\n\r\n    this.shortId = this.id.substring(this.id.length - 6).toUpperCase();\r\n    this.indentLeveL = -1;\r\n\r\n    this.domElement = null;\r\n    this.contentElement = null;\r\n    this.replyBoxContainer = null;\r\n    this.ratingPanel = null;\r\n    this.debugInfoElement = null;\r\n    this.textPreviewElement = null;\r\n\r\n    this.currentX = 0;\r\n    this.currentY = 0;\r\n    this.currentOpacity = 0;\r\n    this.targetX = 0;\r\n    this.targetY = 0;\r\n    this.targetOpacity = 0;\r\n  }\r\n\r\n  render() {\r\n    if (this.domElement) return this.domElement;\r\n\r"
+  },
+  "CommentThreadView.js": {
+    "size": 16380,
+    "lineCount": 535,
+    "constructorParams": "container, options = {}",
+    "methods": [
+      "_createBaseStructure()",
+      "setData(commentDataArray)",
+      "clear()",
+      "_registerNodeAndChildren(node)",
+      "_unregisterNode(node)",
+      "calculateLayout()",
+      "_renderNodesFromLayout(layoutData, immediate = false)",
+      "refreshLayout(onComplete)",
+      "handleExpansionChange(nodeInstance, onComplete)",
+      "_startAnimation(onCompleteCallback = null)",
+      "_animationTick(timestamp)",
+      "_captureCurrentAnimationState()",
+      "_ensureNodesAreRenderedForAnimation()",
+      "_drawLinesInternal()",
+      "_drawLinesForNode(parentNode)",
+      "addComment(data, parentId)",
+      "registerPopup(nodeInstance)",
+      "closeAllPopups()",
+      "_updateAllNodeDebugInfo()",
+      "_sortAllChildren()",
+      "removeRootNode(nodeId)",
+      "setApp(appInstance)",
+      "collapseByRecency(percentile)",
+      "constructor(container, options = }) {"
+    ],
+    "preview": "\r\nclass CommentThreadView {\r\n  _createBaseStructure() {\r\n    this.treeElement = makeElement('div', { className: 'comment-thread' });\r\n    this.container.appendChild(this.treeElement);\r\n    this.svgLayer = makeElement('svg:svg', {\r\n      className: 'comment-thread-svg-layer',\r\n    });\r\n    // Prepend svg layer so comments are on top\r\n    this.treeElement.insertBefore(this.svgLayer, this.treeElement.firstChild);\r\n  }\r\n\r\n  setData(commentDataArray) {\r\n    this.clear();\r\n    this.rootNodes = commentDataArray.map((data) => {\r\n      const root = new CommentNode(data, this);\r\n      this._registerNodeAndChildren(root);\r\n      return root;\r\n    });\r\n\r\n    this.nodesMap.forEach((node) => {\r\n      if (!node.domElement) {\r\n        node.render();\r\n        this.treeElement.appendChild(node.domElement);\r\n        node.domElement.style.opacity = 0;\r\n      }\r\n    });\r\n\r\n    setTimeout(() => {\r\n      this.currentLayout = this.calculateLayout();\r\n      this._updateAllNodeDebugInfo();\r\n      this._renderNodesFromLayout(this.currentLayout, true);\r\n      this._drawLinesInternal();\r\n    }, 0);\r\n  }\r\n\r\n  clear() {\r\n    if (this.animationFrameId) {\r\n      cancelAnimationFrame(this.animationFrameId);\r\n    }\r"
+  },
+  "CommentToolbar.js": {
+    "size": 3590,
+    "lineCount": 122,
+    "constructorParams": "app",
+    "methods": [
+      "constructor(app)",
+      "render()",
+      "updateUser()",
+      "_renderUserContent()"
+    ],
+    "preview": "\r\nclass CommentToolbar {\r\n  constructor(app) {\r\n    this.app = app;\r\n    this.element = null;\r\n    this.userContainer = null;\r\n    this.sliderTrack = null;\r\n  }\r\n\r\n  render() {\r\n    this.element = makeElement('div', { className: 'comment-toolbar' });\r\n\r\n    // --- Left Section: Controls ---\r\n    const controlsSection = makeElement('div', {\r\n      className: 'toolbar-section controls',\r\n    });\r\n\r\n    // 1. Sort Toggle\r\n    const sortBtn = makeElement('button', {\r\n      className: 'toolbar-btn sort-btn',\r\n      title: 'Toggle Sort Order (Newest/Oldest)',\r\n    });\r\n    sortBtn.innerHTML = `\r\n        <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">\r\n            <path d=\"M3 6h18M6 12h12M10 18h4\" />\r\n        </svg>\r\n        <span class=\"sort-label\">Newest</span>\r\n    `;\r\n    sortBtn.onclick = () => {\r\n      this.app.toggleGlobalSortOrder({ currentTarget: sortBtn }); // Reuse existing logic, mockup event\r\n      const label = sortBtn.querySelector('.sort-label');\r\n      label.textContent =\r\n        this.app.globalSortOrder === 'newest' ? 'Newest' : 'Oldest';\r\n    };\r\n    controlsSection.appendChild(sortBtn);\r\n\r\n    // 2. Recency Slider\r\n    const sliderContainer = makeElement('div', {\r\n      className: 'toolbar-slider-group',\r\n      title: 'Adjust Recency (Collapse older comments)',\r"
+  },
+  "NameRenderer.js": {
+    "size": 2195,
+    "lineCount": 86,
+    "constructorParams": null,
+    "methods": [
+      "static render(name)",
+      "static _getColorFromHue(hue, colors)",
+      "static normalize(name)"
+    ],
+    "preview": "class NameRenderer {\r\n  /**\r\n   * Renders a display name string into an HTML string with colored spans.\r\n   * @param {string} name - The display name.\r\n   * @returns {string} The resulting HTML.\r\n   */\r\n  static render(name) {\r\n    if (!name) return '';\r\n\r\n    const DEFAULT_COLOR = 'rgb(3, 174, 192)';\r\n    const colors = [\r\n      [255, 0, 0],\r\n      [255, 125, 0],\r\n      [239, 255, 0],\r\n      [0, 235, 0],\r\n      [0, 120, 255],\r\n      [150, 50, 255],\r\n      [255, 0, 255],\r\n      [255, 0, 0],\r\n    ];\r\n\r\n    let html = '';\r\n    let currentColor = DEFAULT_COLOR;\r\n    const segments = name.split('@');\r\n\r\n    html += `<span style='color:${currentColor}'>${segments[0]}</span>`;\r\n\r\n    for (let i = 1; i < segments.length; i++) {\r\n      const segment = segments[i];\r\n      let hueValue = '';\r\n      let textIndex = 0;\r\n\r\n      while (\r\n        textIndex < segment.length &&\r\n        '.1234567890'.includes(segment[textIndex])\r\n      ) {\r\n        hueValue += segment[textIndex];\r\n        textIndex++;\r\n      }\r\n\r"
+  },
+  "RatingPanel.js": {
+    "size": 5693,
+    "lineCount": 211,
+    "constructorParams": "anchorElement, commentNode",
+    "methods": [
+      "constructor(anchorElement, commentNode)",
+      "_createDom()",
+      "_createSlider(label, color)",
+      "show()",
+      "hide()",
+      "_positionPanel()",
+      "_handleClickOutside(event)"
+    ],
+    "preview": "\r\nclass RatingPanel {\r\n  constructor(anchorElement, commentNode) {\r\n    this.anchorElement = anchorElement;\r\n    this.commentNode = commentNode;\r\n    this.element = null;\r\n    this.feedbackTextarea = null;\r\n    this.sliderValues = { Insightful: 50, Diplomatic: 50, 'Well-written': 50 };\r\n    this._boundHandleClickOutside = this._handleClickOutside.bind(this);\r\n    this._createDom();\r\n    this.show();\r\n  }\r\n\r\n  _createDom() {\r\n    this.element = makeElement('div', { className: 'rating-panel' });\r\n\r\n    const slidersContainer = makeElement('div', {\r\n      className: 'sliders-container',\r\n    });\r\n    slidersContainer.appendChild(this._createSlider('Insightful', '#3498db')); // Blue\r\n    slidersContainer.appendChild(this._createSlider('Diplomatic', '#2ecc71')); // Green\r\n    slidersContainer.appendChild(this._createSlider('Well-written', '#e67e22')); // Orange\r\n\r\n    const feedbackHeader = makeElement(\r\n      'div',\r\n      { className: 'feedback-header' },\r\n      'Private Feedback (AI / Moderator Only)'\r\n    );\r\n\r\n    this.feedbackTextarea = makeElement('textarea', {\r\n      className: 'rating-feedback-textarea',\r\n      placeholder: 'Tell the moderator what you think...',\r\n    });\r\n\r\n    this.feedbackTextarea.onfocus = () => {\r\n      this.element.classList.add('is-expanded');\r\n    };\r\n\r\n    this.feedbackTextarea.onblur = () => {\r\n      this.element.classList.remove('is-expanded');\r"
+  },
+  "ServerAPI.js": {
+    "size": 4768,
+    "lineCount": 188,
+    "constructorParams": "baseUrl = 'https://recursi.dev/commentsApi/api.php'",
+    "methods": [
+      "constructor(baseUrl = 'https://recursi.dev/commentsApi/api.php')",
+      "setBaseUrl(baseUrl)"
+    ],
+    "preview": "class ServerAPI {\r\n  constructor(baseUrl = 'https://recursi.dev/commentsApi/api.php') {\r\n    this.baseUrl = baseUrl;\r\n  }\r\n\r\n  setBaseUrl(baseUrl) {\r\n    if (baseUrl && typeof baseUrl === 'string') {\r\n      this.baseUrl = baseUrl;\r\n    }\r\n  }\r\n\r\n  async _fetch(action, options = {}) {\r\n    const defaultOptions = {\r\n      method: 'GET',\r\n    };\r\n    const fetchOptions = { ...defaultOptions, ...options };\r\n    const hasBody =\r\n      fetchOptions.body !== undefined && fetchOptions.body !== null;\r\n\r\n    let url = `${this.baseUrl}?action=${action}`;\r\n\r\n    if (!fetchOptions.headers) {\r\n      fetchOptions.headers = {};\r\n    } else {\r\n      fetchOptions.headers = { ...fetchOptions.headers };\r\n    }\r\n\r\n    fetchOptions.credentials = 'include';\r\n\r\n    if (hasBody) {\r\n      fetchOptions.headers['Content-Type'] = 'application/json';\r\n      fetchOptions.body = JSON.stringify(fetchOptions.body);\r\n    } else {\r\n      delete fetchOptions.headers['Content-Type'];\r\n      const separator = url.includes('?') ? '&' : '?';\r\n      url += `${separator}_cacheBust=${Date.now()}`;\r\n    }\r\n\r\n    console.log(`[ServerAPI] Sending request to action '${action}'`, {\r\n      url,\r"
+  },
+  "MockServerAPI.js": {
+    "size": 11064,
+    "lineCount": 365,
+    "constructorParams": "",
+    "methods": [
+      "constructor()",
+      "_simulateNetworkDelay(resolveValue, delay = 300)"
+    ],
+    "preview": "class MockServerAPI {\r\n  constructor() {\r\n    this.db = { users: [], threads: { main: [] } }; // Changed comments to threads map\r\n    this.currentUser = null;\r\n\r\n    this.serverUserManager = {\r\n      usersByNormalizedName: new Map(),\r\n      usersById: new Map(),\r\n      _normalizeName: (name) =>\r\n        (name || '')\r\n          .toLowerCase()\r\n          .normalize('NFD')\r\n          .replace(/[\\u0300-\\u036f]/g, ''),\r\n      getOrCreateUser: (displayName) => {\r\n        if (!displayName || !displayName.trim()) {\r\n          throw new Error('Invalid username. Name cannot be empty.');\r\n        }\r\n        const normalized = this.serverUserManager._normalizeName(displayName);\r\n        const existingUsers =\r\n          this.serverUserManager.usersByNormalizedName.get(normalized) || [];\r\n\r\n        const existingUser = existingUsers.find(\r\n          (u) => u.displayName === displayName\r\n        );\r\n\r\n        if (existingUser) {\r\n          if (normalized === 'rob' && !existingUser.avatarUrl) {\r\n            existingUser.avatarUrl =\r\n              'https://recursi.dev/userThumbnails/rob1.png';\r\n            existingUser.avatarUrlL =\r\n              'https://recursi.dev/userThumbnails/rob1_L.png';\r\n          }\r\n          return existingUser;\r\n        }\r\n\r\n        const suffix = existingUsers.length + 1;\r\n        const id = `${normalized}${suffix}`;\r\n        const newUser = {\r\n          id,\r\n          displayName,\r"
+  },
+  "UserManager.js": {
+    "size": 3172,
+    "lineCount": 123,
+    "constructorParams": "",
+    "methods": [
+      "constructor()",
+      "_normalizeName(name)",
+      "_validateName(name)",
+      "getOrCreateUser(displayName)",
+      "getUserById(id)",
+      "getAllUsers()",
+      "isDuplicate(normalizedName)",
+      "reset()",
+      "loadUsers(usersArray)",
+      "addUser(user)"
+    ],
+    "preview": "class UserManager {\r\n  constructor() {\r\n    this.reset();\r\n  }\r\n\r\n  /**\r\n   * Loads a fresh set of users from the server, replacing any existing data.\r\n   * @param {Array<Object>} usersArray - The array of user objects from the API.\r\n   */\r\n\r\n  _normalizeName(name) {\r\n    if (!name) return '';\r\n    return name\r\n      .toLowerCase()\r\n      .normalize('NFD')\r\n      .replace(/[\\u0300-\\u036f]/g, '');\r\n  }\r\n\r\n  _validateName(name) {\r\n    // Letters only, at least 3 characters.\r\n    return /^[a-zA-Z]{3,}$/.test(name);\r\n  }\r\n\r\n  getOrCreateUser(displayName) {\r\n    if (!displayName || !this._validateName(displayName)) {\r\n      console.error('Invalid username:', displayName);\r\n      return null;\r\n    }\r\n\r\n    const normalized = this._normalizeName(displayName);\r\n    const existingUsers = this.usersByNormalizedName.get(normalized) || [];\r\n\r\n    // Check if a user with this exact display name already exists\r\n    const existingUser = existingUsers.find(\r\n      (u) => u.displayName === displayName\r\n    );\r\n    if (existingUser) {\r\n      return existingUser;\r\n    }\r\n\r"
+  },
+  "UserAccountDialog.js": {
+    "size": 6557,
+    "lineCount": 195,
+    "constructorParams": "app",
+    "methods": [
+      "constructor(app)",
+      "show()"
+    ],
+    "preview": "\r\nclass UserAccountDialog {\r\n  constructor(app) {\r\n    this.app = app;\r\n    this.dialog = null;\r\n  }\r\n\r\n  show() {\r\n    const currentUser = this.app.currentUser;\r\n    if (!currentUser) return;\r\n\r\n    this.app.closeAllPopups();\r\n\r\n    const content = makeElement('div', { className: 'user-account-dialog' });\r\n\r\n    // --- DISPLAY NAME SECTION ---\r\n    content.appendChild(makeElement('h3', {}, 'Edit Your Display Name'));\r\n    content.appendChild(\r\n      makeElement(\r\n        'p',\r\n        { className: 'info-text' },\r\n        'You can change the capitalization or add color codes (e.g., \"N@2ame\") without changing your underlying unique name.'\r\n      )\r\n    );\r\n\r\n    const nameInput = makeElement('input', {\r\n      type: 'text',\r\n      className: 'username-input',\r\n      value: currentUser.displayName,\r\n    });\r\n\r\n    const preview = makeElement('div', { className: 'name-preview' });\r\n    const infoText = makeElement('div', { className: 'info-text' });\r\n    const saveButton = makeElement(\r\n      'button',\r\n      { className: 'post-button', disabled: true },\r\n      'Save Changes'\r\n    );\r\n\r\n    const updatePreviewAndState = () => {\r"
+  },
+  "CommentActions.php": {
+    "size": 6628,
+    "lineCount": 203,
+    "constructorParams": null,
+    "methods": [
+      "function handle_delete_comment()",
+      "function handle_get_thread_data()",
+      "function prune_tree(&$nodes)",
+      "function handle_post_comment()",
+      "function handle_admin_seed_comment()",
+      "function handle_submit_rating()",
+      "function _append_to_file($filePath, $record)"
+    ],
+    "preview": "<?php\r\n// --- COMMENT-RELATED ACTION HANDLERS ---\r\n\r\nfunction handle_delete_comment() {\r\n    log_to_file(\"Executing: handle_delete_comment\");\r\n    $input = json_decode(file_get_contents('php://input'), true);\r\n\r\n    if (!isset($input['targetId']) || !isset($input['userId'])) {\r\n        send_json_error('Missing targetId or userId.');\r\n    }\r\n\r\n    $threadId = $input['threadId'] ?? 'main';\r\n    $commentsFilePath = get_comments_file_path($threadId);\r\n\r\n    $tombstone = [\r\n        'type' => 'delete',\r\n        'targetId' => $input['targetId'],\r\n        'deletedBy' => $input['userId'],\r\n        'timestamp' => date('c')\r\n    ];\r\n\r\n    _append_to_file($commentsFilePath, $tombstone);\r\n    echo json_encode(['success' => true]);\r\n}\r\n\r\nfunction handle_get_thread_data() {\r\n    log_to_file(\"Executing: handle_get_thread_data\");\r\n    \r\n    $threadId = $_GET['threadId'] ?? 'main';\r\n    $commentsFilePath = get_comments_file_path($threadId);\r\n    \r\n    $users = read_json_lines(USERS_FILE);\r\n    $raw_lines = read_json_lines($commentsFilePath);\r\n    \r\n    $comments_map = [];\r\n    $deletions_map = [];\r\n    $tree = [];\r\n\r\n    foreach ($raw_lines as $item) {\r\n        if (!is_array($item)) continue;\r"
+  },
+  "UserActions.php": {
+    "size": 13126,
+    "lineCount": 359,
+    "constructorParams": null,
+    "methods": [
+      "function handle_register_user()",
+      "function handle_login_user()",
+      "function handle_set_password()",
+      "function handle_get_or_create_user()",
+      "function handle_get_current_user()",
+      "function handle_update_user_display_name()",
+      "function _set_session_cookie($rawToken)",
+      "function _add_public_user_data(&$user)"
+    ],
+    "preview": "<?php\r\n// --- USER-RELATED ACTION HANDLERS ---\r\n\r\nfunction handle_register_user() {\r\n    log_to_file(\"Executing: handle_register_user\");\r\n    \r\n    if (!check_rate_limit('register', 5, 3600)) {\r\n        send_json_error('Too many registration attempts. Please try again later.', 429);\r\n    }\r\n    \r\n    $input = json_decode(file_get_contents('php://input'), true);\r\n\r\n    if (!isset($input['email']) || !isset($input['password'])) {\r\n        send_json_error('Email and password are required.');\r\n    }\r\n\r\n    $email = strtolower(trim($input['email']));\r\n    $password = trim($input['password']);\r\n    $displayName = isset($input['displayName']) ? strip_tags(trim($input['displayName'])) : '';\r\n\r\n    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {\r\n        send_json_error('Invalid email address.');\r\n    }\r\n    if (strlen($password) < 8) {\r\n        send_json_error('Password must be at least 8 characters.');\r\n    }\r\n\r\n    $text_only_name = preg_replace('/@([0-9\\.]*)?/', '', $displayName);\r\n    if (!preg_match('/^\\p{L}{3,}/u', $text_only_name)) {\r\n        send_json_error('Display name must contain at least 3 letters.');\r\n    }\r\n\r\n    $normalized = normalize_name($displayName);\r\n    $session_token = bin2hex(random_bytes(32));\r\n    $tokenHash = hash_session_token($session_token);\r\n    $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);\r\n\r\n    $result = atomic_read_modify_write(USERS_FILE, function($users) use ($email, $displayName, $normalized, $tokenHash, $passwordHash) {\r\n        // Check email uniqueness inside the lock\r\n        foreach ($users as $user) {\r"
+  },
+  "api.php": {
+    "size": 5068,
+    "lineCount": 137,
+    "constructorParams": null,
+    "methods": [
+      "function shutdown_crash_handler()",
+      "function is_allowed_origin($origin)",
+      "function apply_cors_headers()"
+    ],
+    "preview": "<?php\r\nini_set('display_errors', 0);\r\nerror_reporting(E_ALL);\r\n\r\nfunction shutdown_crash_handler() {\r\n    $error = error_get_last();\r\n    if ($error && ($error['type'] === E_ERROR || $error['type'] === E_PARSE || $error['type'] === E_COMPILE_ERROR || $error['type'] === E_CORE_ERROR)) {\r\n        if (ob_get_length()) ob_clean();\r\n\r\n        http_response_code(500);\r\n        header('Content-Type: application/json');\r\n        echo json_encode([\r\n            'success' => false,\r\n            'error' => \"FATAL PHP ERROR: \" . $error['message'],\r\n            'file' => $error['file'],\r\n            'line' => $error['line']\r\n        ]);\r\n        exit;\r\n    }\r\n}\r\nregister_shutdown_function('shutdown_crash_handler');\r\n\r\nob_start();\r\n\r\nheader('Content-Type: application/json; charset=utf-8');\r\nheader('X-Content-Type-Options: nosniff');\r\nheader('X-Frame-Options: DENY');\r\nheader('X-XSS-Protection: 1; mode=block');\r\n\r\nfunction is_allowed_origin($origin) {\r\n    if (!$origin) return false;\r\n\r\n    $allowed_origins = [\r\n        'https://recursi.dev',\r\n        'https://www.recursi.dev',\r\n        'https://mindfulvibecoding.org',\r\n        'http://mindfulvibecoding.org',\r\n        'https://recursi.dev',\r\n        'http://recursi.dev',\r\n    ];\r"
+  }
+}

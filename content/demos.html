@@ -1,0 +1,37 @@
+<article data-page="demos" data-dossier="CommentsDocs">
+  <header data-section="page_header">
+    <span class="dossier-kicker">CAD Architecture Dossier</span>
+    <h1 class="dossier-title">7. Production Studio</h1>
+  </header>
+
+  <section data-section="core_content">
+    <p data-block="demos_p_real_accudraw_1">Rather than running an isolated, simplified toy mock-up, our studio laboratory directly runs the authentic production engine from `accuCad`. The live viewport above embeds the actual `accuCad` environment: its full direction-cosine matrix basis (`BaseController.js`), dynamic coordinate constraint engine (`AccuDrawLogic.js`), animated squircle compass (`Squircle3D.js`), side panel tool settings, and the complete single-stroke keyboard command dispatch tree (`T`, `F`, `S`, `L`, `Space`, `O`).</p>
+    <p data-block="demos_p_real_accudraw_2">A fundamental distinction in our graphics engine is the difference between turntable rotation and **motion parallax oscillation**. Turntable rotation is a display gimmick that spins the object away from the draftsman, destroying spatial drafting context. In our engine (implemented in `CameraOrbitAnimator.js`), true oscillation wiggles the eye position in a small disk (3–5% of the viewing distance) strictly perpendicular to the current line of sight. The user controls the general direction they are looking from, and the subtle parallax oscillation lets the human visual cortex perceive genuine 3D spatial depth through natural motion parallax without stereoscopic glasses.</p>
+    <aside data-block="demos_sidebar_real_accudraw_math" data-type="sidebar">
+      <strong class="sidebar-title">real accudraw math</strong>
+      <p>Parallax Oscillation vs. Turntable Rotation:</p>
+      <p>
+• Line of Sight Vector: `D = CamPos - TargetPos` with unit normal `N = D / ||D||`.</p>
+      <p>
+• Perpendicular Basis: Derives tangent `U` and bitangent `V` orthonormal to `N`.</p>
+      <p>
+• Motion Parallax Offset: `Offset = U * cos(θ) * R + V * sin(θ) * R` where `R = ||D|| * 0.045`.</p>
+      <p>
+• Cognitive Benefit: Maintains the user's selected viewing perspective while continuously revealing 3D spatial relationships via monocular depth cues.</p>
+    </aside>
+    <p data-block="demos_p_real_curve_1">For curve and line drafting, our architecture eliminates traditional Bezier tangent handles through `DrawPathCommand.js` and `RoundingUtils3D.js`. When a user clicks points, they place anchors strictly *on the curve itself*. Each vertex carries an optional dynamic radius property (`v.radius`), allowing sharp polylines to be rounded into true circular arcs on the fly.</p>
+    <p data-block="demos_p_real_curve_2">In the Dynamic On-Curve Spline Lab tab, the curve does not calculate blindly on point commits alone. As the draftsman moves the cursor, the spline rubber-bands dynamically at 60 FPS, with `UpdateControlPoints.run` continuously deriving G1 tangent vectors through the floating candidate point. When you adjust the Curvature (tension) or Balance (tangency weighting) sliders, the entire spline morphs smoothly in real time without manual handle wrestling, matching the authentic behavior of Rob Brown's `DrawingApp`.</p>
+    <aside data-block="demos_sidebar_real_curve_math" data-type="sidebar">
+      <strong class="sidebar-title">real curve math</strong>
+      <p>Production Curve Engine in CommentsDocs:</p>
+      <p>
+• `BezierVertex.js`: Stores on-curve through-points, control points [CP0, CP1], curvature, and balance.</p>
+      <p>
+• `UpdateControlPoints.js`: 8-iteration relaxation solver deriving exact cubic Bezier tangents and arc fractions.</p>
+      <p>
+• `RoundingUtils3D.js`: Closed-form 3D vector bisector math for sharp corner fillets.</p>
+      <p>
+• `DrawPathCommand.js`: Continuous line chaining, auto-close snapping, and dynamic preview geometry.</p>
+    </aside>
+  </section>
+</article>

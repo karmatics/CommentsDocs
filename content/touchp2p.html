@@ -1,0 +1,44 @@
+<article data-page="touchp2p" data-dossier="CommentsDocs">
+  <header data-section="page_header">
+    <span class="dossier-kicker">CAD Architecture Dossier</span>
+    <h1 class="dossier-title">6. Wireless TouchController</h1>
+  </header>
+
+  <section data-section="core_content">
+    <p data-block="touchp2p_p_p2p_ergonomics_1">In modern desktop computing, your left hand is usually idle or hovering over a keyboard while your right hand does 95% of the physical work on the mouse. In CAD, this is an enormous waste of human bandwidth. To adjust a curve tension, line thickness, or 3D camera depth, traditional software forces you to stop drawing, move your mouse away from the geometry, click an input field, type a number, and return to find where you were.</p>
+    <p data-block="touchp2p_p_p2p_ergonomics_2">With `TouchController`, your phone connects over a low-latency WebRTC data channel and becomes a wireless analog modulation deck for your left hand. While your right hand uses the mouse with the fine motor precision of a pen (clicking points, locking axes, and snapping geometry), your left hand rests on the glass, fluidly scrubbing continuous parameters—curve curvature, corner fillet radius, or 3D elevation Z—without ever taking your eyes off the drawing.</p>
+    <aside data-block="touchp2p_sidebar_two_handed_cad" data-type="sidebar">
+      <strong class="sidebar-title">two handed cad</strong>
+      <p>Two-Handed CAD Bandwidth Division:</p>
+      <p>
+• Right Hand (Mouse / Stylus):</p>
+      <p>
+  - Discrete, precision spatial operations: vertex picking, tentative chord snapping, axis alignment.</p>
+      <p>
+• Left Hand (Mobile Glass Trackpad):</p>
+      <p>
+  - Continuous analog variables: curve tension, fillet radius, infinite Z-elevation wheel.</p>
+      <p>
+• Zero Friction: No stopping to select numerical textboxes; adjust parameters while the rubber-band line is live.</p>
+    </aside>
+    <p data-block="touchp2p_p_trackpad_schema_1">The mobile interface is partitioned into two specialized zones: the Left Trackpad for 3D Camera Navigation, and the Right Trackpad for Parameter Modulation.</p>
+    <p data-block="touchp2p_p_trackpad_schema_1_sub">The Left Trackpad supports multi-touch gestures: 1-finger orbit, 2-finger pan, pinch-zoom, 3-finger FOV lens perspective, and 4-finger vertical swipe for infinite AccuDraw Z-elevation translation.</p>
+    <p data-block="touchp2p_p_trackpad_schema_2">The Right Trackpad acts as an array of virtual rotary encoders: vertical swiping selects which active tool slider to modulate (showing a glowing green dashed guide line across the desktop screen), horizontal scrubbing dials the value, and a quick tap toggles booleans or opens direct entry.</p>
+    <aside data-block="touchp2p_sidebar_trackpad_mapping" data-type="sidebar">
+      <strong class="sidebar-title">trackpad mapping</strong>
+      <p>P2P Event Dispatch Table:</p>
+      <p>
+• `drag`: View orbit (spin/tilt) or pan translation.</p>
+      <p>
+• `zoom`: Focal ratio scaling.</p>
+      <p>
+• `perspective`: Camera FOV lens distortion.</p>
+      <p>
+• `accudrawZ`: 4-finger vertical swipe rolling the infinite elevation wheel.</p>
+      <p>
+• `sliderDragStart` / `sliderDragMove`: Vertical slider selection with desktop on-screen indicator line.</p>
+      <p>
+• `sliderAdjust`: Real-time analog parameter scrubbing.</p>
+    </aside>
+  </section>
+</article>

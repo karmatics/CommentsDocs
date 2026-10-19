@@ -1,0 +1,696 @@
+<article data-page="cadcraft" data-dossier="CommentsDocs">
+  <header data-section="page_header">
+    <span class="dossier-kicker">CAD Architecture Dossier</span>
+    <h1 class="dossier-title">10. CADCraft & CompassDraw</h1>
+  </header>
+
+  <section data-section="core_content">
+    <p data-block="cadcraft_p_artcraft_1">In late 2026, developer Brandon Thomas launched ArtCraft—a suite of clean-room, pure-Rust applications created to take on Adobe and Autodesk subscription models. Among tools like PhotoCraft, VectorCraft, and FilmCraft, the flagship engineering tool is CADCraft (v0.7.0, hosted at `github.com/storytold/cadcraft` and `getartcraft.com`). It is a fast, multiplatform AutoCAD alternative that compiles to native binaries on macOS, Windows, Linux, and FreeBSD, as well as to WebAssembly for the browser.</p>
+    <p data-block="cadcraft_p_artcraft_2">CADCraft recreates AutoCAD's workflow: command-line prompt loops (`LINE`, `CIRCLE`, `OFFSET`, `TRIM`), layers, dimensions, and DXF/DWG file handling via acadrust. However, it inherits AutoCAD's historic constraints: drafting is largely confined to 2D planes, lacks kinetic 3D construction plane rotation, has no context-aware floating compass, and requires typing coordinate offsets like `@5<45`.</p>
+    <p data-block="cadcraft_p_artcraft_2_sub">Our objective is not to compete with CADCraft or build another clone from scratch. Our mission is to **convince the ArtCraft and open-source CAD community to put three clean, non-invasive hooks into their architecture**. If those hooks exist, CompassDraw can be distributed as a drop-in plugin that unlocks 3D spatial superpowers with zero upstream fork drift. Because this specification is mathematically rigorous and complete, a modern AI agent can implement these hooks into CADCraft **overnight**, leaving only verification and testing for the maintainers.</p>
+    <aside data-block="cadcraft_sidebar_cadcraft_spec" data-type="sidebar">
+      <strong class="sidebar-title">cadcraft spec</strong>
+      <p>The Upstream Partnership Thesis (ArtCraft & Rob Brown):</p>
+      <p>
+• The Official 3D Engine: The ideal path is ArtCraft adopting CompassDraw as its official built-in 3D spatial drafting engine, with inventor Rob Brown leading the spatial interaction roadmap.</p>
+      <p>
+• Zero-Drift Plugin Superpower: CADCraft remains 100% AutoCAD-compatible. No commands or data structures are altered.</p>
+      <p>
+• The 3 Clean Hooks: PointInterceptor (filters points before Accept::POINT), RenderOverlay (top wgpu pass for the compass), and CommandHint (tools dispatch exit tangents).</p>
+      <p>
+• Overnight Agent Implementation: An AI coding agent can implement these three traits in a clean PR in hours because CommentsDocs provides the exact mathematical derivations.</p>
+      <p>
+• Strategic Win-Win: Gives ArtCraft the 30-year usability moat that kept Bentley customers loyal, while giving Rob Brown the platform to run with modern spatial CAD.</p>
+    </aside>
+    <p data-block="cadcraft_p_crate_arch_1">Our inspection of the cloned CADCraft repository confirms a modern, modular Rust workspace. Instead of a monolithic executable, the system is partitioned into discrete domain crates. At the mathematical foundation sits `cadcraft-geom`, which manages 64-bit double-precision (`f64`) vector geometry, transformation matrices, and spline interpolation.</p>
+    <p data-block="cadcraft_p_crate_arch_2">Crucially, the workspace contains both `cadcraft-engine` (which drives the interactive event loop, tool state machines, and cursor hit-testing) and `cadcraft-constraints`. This demonstrates that CADCraft's architectural roadmap is actively looking toward constraint-based workflows, making it the ideal host for CompassDraw.</p>
+    <aside data-block="cadcraft_sidebar_cadcraft_crates" data-type="sidebar">
+      <strong class="sidebar-title">cadcraft crates</strong>
+      <p>Verified CADCraft v0.7.0 Crate Map:
+• `cadcraft-geom`: Pure 64-bit geometric primitives, vectors (`Vec2`), rays, bounds, and transformation matrices (`Mat3`).
+• `cadcraft-constraints`: Geometric relationship and dimensional constraint solver using damped Gauss-Newton minimization (`lm.rs`).
+• `cadcraft-doc`: High-performance copy-on-write document database (layers, blocks, undo/redo).
+• `cadcraft-engine`: Interactive tool state machines, mouse/keyboard event loops, coordinate filters (`pointmod.rs`), and vertex snapping.
+• `cadcraft-render`: Viewport rendering abstraction built on `wgpu`.
+• `cadcraft-ui-egui`: Immediate-mode desktop UI shell.
+• `cadcraft-mcp`: Model Context Protocol server exposing CAD endpoints to AI coding agents.</p>
+    </aside>
+    <p data-block="cadcraft_p_crate_arch_3">Because `cadcraft-engine` handles coordinate inputs through discrete event streams, CompassDraw does not need to alter how DWG entities or document layers are serialized. We hook directly into `cadcraft-engine`'s point-input pipeline: when a command requests a coordinate, CompassDraw resolves the point using direction cosines and active constraints, then delivers the clean 3D coordinate.</p>
+    <p data-block="cadcraft_p_pointmod_1">Inside `cadcraft-engine/src/pointmod.rs`, CADCraft implements standard AutoCAD point modifiers. In AutoCAD, point modifiers allow users to filter incoming points (e.g., typing `.x` to lock the X coordinate of a reference vertex, or engaging Ortho mode with F8 to restrict movement to horizontal or vertical axes).</p>
+    <p data-block="cadcraft_p_pointmod_2">In CADCraft's source code, `Session::point_mods` stores an active stack of `Frame` enums representing active `.X`, `.Y`, `FROM`, or `M2P` modifiers. While a frame is pending, CADCraft halts normal command execution and displays modal sub-prompts. CompassDraw bypasses this friction by maintaining a live 3D floating orientation frame (`Mat3`): single-key shortcuts (`X`, `Y`, `Z`, `L`) lock dimensions instantaneously without prompting, passing resolved coordinates directly to the command.</p>
+    <aside data-block="cadcraft_sidebar_pointmod_hook" data-type="sidebar">
+      <strong class="sidebar-title">pointmod hook</strong>
+      <p>Verified cadcraft-engine::pointmod::Frame Enum:
+```rust
+pub enum Frame {
+    From { base: Option<Vec2> },
+    Mid { first: Option<Vec2> },
+    Filter { keep: Axes, first: Option<Vec2> },
+    Angle { base: Vec2, dir: Vec2 },
+    Snap { mode: u32 },
+    TempTrack,
+    Track { last: Option<Vec2> },
+}
+```
+• 2D Limitation: CADCraft coordinates are strictly `Vec2`. All point filters assume a flat planar projection.
+• Modal Prompting: While frames are pending, the engine prompts for missing axes (e.g. '.X of', '(need YZ):').
+• The CompassDraw Upgrade: Replaces modal prompt waiting with a kinetic 3D direction-cosine basis (`Mat3`). Cursor motion and single-key locks immediately resolve 3D coordinates into `Accept::POINT` without typing.</p>
+    </aside>
+    <p data-block="cadcraft_p_pointmod_3">Notice that CADCraft's `pointmod.rs` currently relies strictly on 2D coordinates (`Vec2`). By introducing CompassDraw's 3D direction-cosine basis (`T`, `F`, `S`, `V`), we expand CADCraft from planar 2D drafting into full 3D spatial construction planes without modifying AutoCAD command semantics.</p>
+    <p data-block="cadcraft_p_cmds_1">A complete inspection of `cadcraft-engine/src/cmd` reveals how native AutoCAD commands are structured. For example, in `draw.rs`, the `LINE` command registers an initial prompt ('Specify first point:') requiring `Accept::POINT`. Once satisfied, it transitions into an iterative segment loop ('Specify next point or [Undo]:') until the user presses Enter or Escape.</p>
+    <p data-block="cadcraft_p_cmds_2">Each command in `cadcraft-engine/src/cmd` follows a standardized execution lifecycle: it registers required inputs via `Session::prompt`, queries whether `Accept::POINT` is active, and receives coordinates dispatched through the engine's event loop. When paired with CompassDraw and our local LAN TouchController, the designer can navigate 3D construction planes and modulate parameters with their left hand on their phone while their right hand snaps geometry with zero modal interruptions.</p>
+    <aside data-block="cadcraft_sidebar_cmds_map" data-type="sidebar">
+      <strong class="sidebar-title">cmds map</strong>
+      <p>CADCraft Command Map (crates/engine/src/cmd):
+• `draw.rs` & `draw2.rs`: Primitive drafting (LINE, RECTANG, POLYGON, POINT).
+• `curves.rs`: Circular arcs, 3-point arcs, full circles, and ellipses.
+• `pline_opts.rs`: Continuous polylines with inline arc segment switching.
+• `spline_opts.rs`: NURBS spline curve generation with fit points and control vertices.
+• `trimextend.rs`: Boundary trimming and edge extension.
+• `constraints.rs`: Command interface connecting entities to the Levenberg-Marquardt solver.</p>
+    </aside>
+    <p data-block="cadcraft_p_doc_1">In `cadcraft-doc`, CADCraft uses a high-performance copy-on-write document architecture. Geometric primitives are stored as discrete, immutable records indexed by a generational entity handle (`Handle`). When an entity is drawn, modified, or deleted, a lightweight delta transaction is committed to the drawing database, allowing instant multi-level undo and redo.</p>
+    <p data-block="cadcraft_p_doc_2">Our inspection of `cadcraft-doc/src/entity.rs` confirms a comprehensive 30-variant `EntityKind` enum representing the complete AutoCAD entity taxonomy: from standard `Line`, `Arc`, and `Circle` primitives, to `LwPolyline`, `Polyline3d`, `Spline`, `Helix`, and `Dimension` objects. CompassDraw targets these entities directly, resolving constraints in real time and committing pure geometric vectors to the document store.</p>
+    <aside data-block="cadcraft_sidebar_doc_entities" data-type="sidebar">
+      <strong class="sidebar-title">doc entities</strong>
+      <p>Verified cadcraft-doc::EntityKind Enum (30 Variants):
+```rust
+pub enum EntityKind {
+    Line(Line), Point(Point), Circle(Circle), Arc(Arc), Ellipse(Ellipse),
+    LwPolyline(LwPolyline), Polyline3d(Polyline3d), Spline(GSpline), Helix(Helix),
+    Ray(RayLine), XLine(RayLine), Text(Text), MText(MText), AttDef(Attrib),
+    Insert(Insert), Dimension(Dimension), MLine(MLine), Leader(Leader),
+    MLeader(MLeader), Hatch(Hatch), Solid(Solid), Trace(Solid), Face3d(Face3d),
+    Region(Region), Viewport(Viewport), Image(Image), Wipeout(Wipeout),
+    Table(Table), Tolerance(Tolerance), Unknown(Unknown)
+}
+```
+• Generational Handles: Every entity is addressed via numeric `Handle`, eliminating dangling pointers.
+• Copy-on-Write: Whole-drawing clones are lightweight pointer copies, enabling instant undo/redo snapshots.</p>
+    </aside>
+    <p data-block="cadcraft_p_snap_comp_1">In `cadcraft-engine/src/snap.rs`, CADCraft implements traditional AutoCAD object snaps (O-snaps). It queries an R-tree spatial index (`spatial.rs`) to find nearby geometry features: endpoints, midpoints, centers, perpendicular projections, and intersections. However, standard O-snaps are passive: they only trigger when the cursor happens to land directly on top of existing geometry.</p>
+    <p data-block="cadcraft_p_snap_comp_2">CompassDraw radically elevates this through tentative snapping and active projection guides. In our prototype (`TentativePointHandler.js`), chorded clicks (or dedicated hotkeys) initiate a tentative point. If an element's wireframe is thin, screen-space segment thresholding performs a 'thick pick' within a 10-pixel radius, snapping to the element and dropping dynamic perpendicular projection lines down to the working plane.</p>
+    <aside data-block="cadcraft_sidebar_snap_mechanics" data-type="sidebar">
+      <strong class="sidebar-title">snap mechanics</strong>
+      <p>Snapping Comparison:
+• CADCraft O-Snaps (`snap.rs`): Passive proximity testing against an R-tree index. Rigid, screen-planar, and requires the mouse to stay hovering over the target vertex.
+• CompassDraw Tentative Snapping (`TentativePointHandler.js`): Active spatial anchoring. Captures a candidate vertex, anchors the floating origin, renders a 3-axis Mini-Jack cursor, and allows the mouse to pull away along locked axes while maintaining the exact coordinate anchor.</p>
+    </aside>
+    <p data-block="cadcraft_p_wasm_1">In `apps/cadcraft-web`, CADCraft provides its official WebAssembly browser application. Built using `trunk build --release`, the app runs the identical `cadcraft_ui_egui::CadApp` as the desktop binary through eframe's web runner, supporting WebGPU where available with an automatic WebGL2 fallback via the `?webgl` URL parameter.</p>
+    <p data-block="cadcraft_p_wasm_2">By deploying CompassDraw as a WebAssembly-compatible input module, we can run our complete 3D constraint engine directly inside `cadcraft-web`. Users accessing CADCraft in the browser get immediate AccuDraw-style single-key plane switching (`T`, `F`, `S`, `V`), squircle polar/rectangular transitions, and P2P mobile phone control with zero local installation.</p>
+    <aside data-block="cadcraft_sidebar_wasm_interface" data-type="sidebar">
+      <strong class="sidebar-title">wasm interface</strong>
+      <p>Verified apps/cadcraft-web Architecture:
+• Toolchain: Compiled with `trunk build --release` from `apps/cadcraft-web` (output in `dist/web`).
+• GPU Pipeline: eframe web runner with WebGPU primary and WebGL2 fallback (`?webgl` flag).
+• Runtime URL Flags:
+  - `?host=parent`: Activates `host.rs` iframe parent bridge.
+  - `?webgl`: Forces WebGL2 mode across older browsers.
+  - `?cpu`: Draws canvas via CPU rasterization with egui shapes.
+  - `?sample`: Pre-loads CADCraft sample drawing.
+• Zero-Fork Embedding: Parent page loads `iframe src="cadcraft-web/?host=parent&webgl"` and controls drawing state via postMessage.</p>
+    </aside>
+    <p data-block="cadcraft_p_pm_1">Our inspection of `apps/cadcraft-web/src/host.rs` revealed an extraordinary integration asset: CADCraft's web build already includes a native `postMessage` bridge for same-origin parent pages when launched with `?host=parent` (originally designed for embedding in iframe containers like Nextcloud apps).</p>
+    <p data-block="cadcraft_p_pm_2">Inside `apps/cadcraft-web/src/host.rs`, a thread-local `BRIDGE` intercepts the engine's file delivery hook (`deliver`). When running under `?host=parent`, CADCraft dispatches `cadcraft:ready` with its engine version. The parent page can inject drawings by posting `{ type: 'cadcraft:open', name: 'model.dwg', bytes: arrayBuffer }`. Whenever the user triggers `SAVE`, `SAVEAS`, or export, CADCraft intercepts browser downloads and transfers the raw `ArrayBuffer` directly to the parent page via `cadcraft:save`, while `cadcraft:dirty` reports unsaved state changes.</p>
+    <aside data-block="cadcraft_sidebar_postmessage_protocol" data-type="sidebar">
+      <strong class="sidebar-title">postmessage protocol</strong>
+      <p>Verified apps/cadcraft-web/src/host.rs Implementation:
+```javascript
+// Parent Shell (Luno / Three.js) Integration Recipe:
+const iframe = document.createElement('iframe');
+iframe.src = '/cadcraft-web/index.html?host=parent&webgl';
+document.body.appendChild(iframe);</p>
+      <p>window.addEventListener('message', (e) => {
+  if (e.origin !== window.location.origin) return;
+  const { type, name, bytes, dirty, version } = e.data;</p>
+      <p>  if (type === 'cadcraft:ready') {
+    console.log(`CADCraft v${version} engine initialized.`);
+    // Send DWG/DXF ArrayBuffer to open
+    iframe.contentWindow.postMessage({
+      type: 'cadcraft:open',
+      name: 'chassis.dwg',
+      bytes: drawingArrayBuffer
+    }, window.location.origin);
+  }
+  else if (type === 'cadcraft:save') {
+    // Intercepts SAVE/EXPORT commands with zero-copy ArrayBuffer transfer
+    console.log(`Received saved binary for ${name} (${bytes.byteLength} bytes)`);
+    CadStorageManager.saveDrawingBinary(name, bytes);
+  }
+  else if (type === 'cadcraft:dirty') {
+    updateUnsavedStatus(dirty);
+  }
+});
+```
+• Zero-Copy: Uses post_message_with_transfer(&[buffer]) in Rust for instantaneous binary I/O.
+• Zero Upstream Drift: CADCraft requires zero source code modifications to embed into our workspace.</p>
+    </aside>
+    <p data-block="cadcraft_p_pm_3">This postMessage protocol establishes our Phase 1 zero-fork integration architecture: our workspace embeds unmodified `cadcraft-web` inside an iframe with `?host=parent&webgl`, overlays our Three.js CompassDraw squircle HUD and P2P mobile touch controller directly above the iframe canvas, and routes drawing files via zero-copy `ArrayBuffer` transfers without touching a single line of CADCraft's upstream Rust code.</p>
+    <p data-block="cadcraft_p_lm_solver_1">A notable discovery in the CADCraft codebase is `cadcraft-constraints`. The crate includes `lm.rs` (a Levenberg-Marquardt non-linear least-squares solver) and `dof.rs` (a Degrees-of-Freedom analyzer). This shows CADCraft is already laying the foundation for parametric constraint solving.</p>
+    <p data-block="cadcraft_p_lm_solver_2">Inside CADCraft's `crates/constraints/src/lm.rs`, the Levenberg-Marquardt solver minimizes non-linear geometric residuals using a damped Gauss-Newton step: `Δx = −W⁻¹ Jᵀ (J W⁻¹ Jᵀ + μ I)⁻¹ r` with finite-difference Jacobians. Under-constrained drawings move as little as possible, and recently placed vertices are heavily weighted.</p>
+    <p data-block="cadcraft_p_lm_solver_2_sub">This creates a direct synergy with CompassDraw: when a user snaps an AccuDraw parallel, perpendicular, or distance lock, CompassDraw resolves the instantaneous 3D point for the command loop, and simultaneously posts a residual constraint to `cadcraft-constraints` for persistent parametric updates.</p>
+    <aside data-block="cadcraft_sidebar_constraints_solver" data-type="sidebar">
+      <strong class="sidebar-title">constraints solver</strong>
+      <p>CADCraft Constraint Engine Internals:
+• `lm.rs`: Dampened non-linear least-squares optimization minimizing geometric residual equations.
+• `dof.rs`: Tracks unconstrained degrees of freedom across topological vertices.
+• `residual.rs`: Calculates geometric divergence (distance deltas, angle errors) for solver iterations.
+• Synergy with CompassDraw: CompassDraw establishes transient drafting constraints in real time, which can then be serialized into `cadcraft-constraints` for persistent parametric editing.</p>
+    </aside>
+    <p data-block="cadcraft_p_mcp_1">One of CADCraft's most forward-looking components is `cadcraft-mcp`. The Model Context Protocol (MCP) crate provides a standardized server interface allowing external AI models (like Claude or local LLMs) to inspect drawing state, query layers, and execute drafting operations through structured JSON-RPC calls.</p>
+    <p data-block="cadcraft_p_mcp_2">Historically, CAD automation was restricted to LISP scripts or heavy C++ ARX plugins that required intricate manual scripting. Under CADCraft's MCP architecture, an AI agent can read drawing geometry, infer design intent, and issue drawing commands directly. When paired with CompassDraw, the agent can specify relative vectors and alignment locks using the same geometric vocabulary as a human drafter.</p>
+    <aside data-block="cadcraft_sidebar_mcp_endpoints" data-type="sidebar">
+      <strong class="sidebar-title">mcp endpoints</strong>
+      <p>cadcraft-mcp Architecture:
+• Model Context Protocol Server: Exposes drawing sessions to AI coding agents via standard stdio JSON-RPC transport.
+• Tool Endpoints: `tool_definitions()`, `call_tool()`, and `command_matches()` for querying entities, creating lines/arcs, applying layers, and reading bounds.
+• CompassDraw Agent Synergy: Allows autonomous AI agents to drive the AccuDraw/CompassDraw constraint engine programmatically, producing perfectly snapped, non-overlapping geometry without trial-and-error coordinate typing.</p>
+    </aside>
+    <p data-block="cadcraft_p_spec_1">The primary architectural requirement for the upstream integration is maintaining **zero fork drift**: CADCraft's command loop, document schema, and file parsers must remain completely unmodified. CompassDraw sits in `cadcraft-engine` as an optional input filter.</p>
+    <p data-block="cadcraft_p_spec_1_sub">When a user is in classic AutoCAD mode, raw mouse events flow directly into `pointmod.rs` as normal. But when CompassDraw is engaged, it intercepts mouse coordinates and keyboard strokes before CADCraft's prompt state machine can enter a modal waiting state.</p>
+    <p data-block="cadcraft_p_spec_2">To achieve this, our AI agents will submit a clean pull request implementing the `PointInterceptor` trait in `cadcraft-engine/src/interceptor.rs`. In `session.rs`, before `Session::step` evaluates input modifiers, it checks `interceptor.filter_point(...)`.</p>
+    <p data-block="cadcraft_p_spec_2_sub">If the compass has an active axis lock, tentative point, or distance constraint, it returns the resolved coordinate. The command receives a valid coordinate satisfying `Accept::POINT` on the first click. Single-keystroke commands (`T`, `F`, `S`, `V`, `L`, `Space`) return `true` from `handle_key(...)`, intercepting the keystroke before it can clutter the AutoCAD command-line prompt buffer.</p>
+    <aside data-block="cadcraft_sidebar_interception_contract" data-type="sidebar">
+      <strong class="sidebar-title">interception contract</strong>
+      <p>The Upstream PointInterceptor Trait Contract:</p>
+      <p>
+```rust</p>
+      <p>
+// crates/engine/src/interceptor.rs</p>
+      <p>
+pub trait PointInterceptor {</p>
+      <p>
+    /// Resolves raw viewport raycasts into constrained 3D/2D coordinates.</p>
+      <p>
+    fn filter_point(</p>
+      <p>
+        &mut self,</p>
+      <p>
+        raw_world_point: [f64; 3],</p>
+      <p>
+        ray_origin: [f64; 3],</p>
+      <p>
+        ray_direction: [f64; 3],</p>
+      <p>
+        is_tentative_active: bool,</p>
+      <p>
+    ) -> Option<[f64; 3]>;</p>
+      <p></p>
+      <p>    /// Captures single-stroke shortcuts without waiting for Enter.</p>
+      <p>
+    fn handle_key_down(&mut self, key: &str, ctrl: bool, shift: bool) -> bool;</p>
+      <p>
+}</p>
+      <p></p>
+      <p>// crates/engine/src/cmd/traits.rs</p>
+      <p>
+pub trait CommandHintEmitter {</p>
+      <p>
+    /// Allows tools like LineM and PlineM to inform CompassDraw</p>
+      <p>
+    /// of segment exit tangents, origins, and polar lock hints.</p>
+      <p>
+    fn emit_hint(&mut self, hint: AccuDrawHint);</p>
+      <p>
+}</p>
+      <p>
+```</p>
+      <p>
+• 2D/3D Harmony: In 2D mode, `filter_point` clamps $Z=0$ and returns `[x, y, 0]`, mapping seamlessly to CADCraft's `Vec2`.</p>
+      <p>
+• Zero Command Drift: Commands like `LineM` remain 100% standard AutoCAD code.</p>
+    </aside>
+    <p data-block="cadcraft_p_trademark_1">A key strategic decision is naming. Bentley Systems holds the trademark on 'AccuDraw'. However, my foundational patent (US Patent #5,754,182, issued in 1998) has reached the end of its 20-year statutory term and is now in the public domain. The mathematics—floating origin translation, direction-cosine matrix projections, smart locks, and polar/rectangular squircle transitions—can be implemented freely by anyone.</p>
+    <p data-block="cadcraft_p_trademark_2">By rebranding our implementation as CompassDraw (or SmartCompass / Compass CAD), we eliminate any trademark friction with Bentley while bringing the functionality to CADCraft and AutoCAD users. The name communicates the function immediately: an intelligent, floating 3D kinetic compass that guides the cursor.</p>
+    <aside data-block="cadcraft_sidebar_trademark_vs_patent" data-type="sidebar">
+      <strong class="sidebar-title">trademark vs patent</strong>
+      <p>IP Analysis:
+1. Patents (Expired): US Patent #5,754,182 (Robert J. Brown, Bentley Systems). The 20-year exclusivity period has expired. The underlying algorithms and user interface mechanics are public domain.
+2. Trademarks (Active): 'AccuDraw', 'MicroStation', and 'SmartLine' remain active marks of Bentley Systems.
+3. Brand Independence: Using 'CompassDraw' allows us to distribute the tool freely across open-source ecosystems without trademark complications.</p>
+    </aside>
+    <p data-block="cadcraft_p_engine_1">A central engineering question is whether to build purely in Rust or maintain a browser-first Three.js architecture. Pure Rust (`wgpu` / Bevy / `femtovg`) creates fast, self-contained desktop executables without a browser runtime. However, rebuilding Three.js's 3D visual capabilities from scratch in Rust requires significant graphics engineering.</p>
+    <p data-block="cadcraft_p_engine_2">In Three.js, loading a glTF/GLB model with realistic PBR materials, clearcoat reflections, and directional shadows requires just a few lines of code. More importantly, Three.js provides `Line2`—anti-aliased, screen-space thick line rendering with accurate miter joints and depth testing. In raw `wgpu`, implementing resolution-independent line thickness across 3D perspective projections requires custom vertex shader expansion pipelines and fragment distance fields.</p>
+    <aside data-block="cadcraft_sidebar_engine_comparison" data-type="sidebar">
+      <strong class="sidebar-title">engine comparison</strong>
+      <p>Pipeline Comparison:
+• Pure Rust (`wgpu`): High desktop performance, small binary size, direct native CADCraft integration. Trade-offs: Complex custom shaders for thick wireframes, manual glTF/PBR material pipelines, and higher maintenance.
+• Three.js (WebGL/WebGPU): Rapid iteration, built-in PBR materials (`MeshPhysicalMaterial`), glTF/Draco loaders, native WebRTC P2P for phone controllers, and instant zero-install web distribution.
+• The Hybrid Solution: Implement the CompassDraw constraint math as a decoupled module (or Rust crate compiled to WebAssembly). On desktop, it drives CADCraft's native viewport; in the web sandbox, it drives Three.js with full PBR rendering.</p>
+    </aside>
+    <p data-block="cadcraft_p_engine_3">The hybrid model allows us to deploy CompassDraw everywhere: CADCraft desktop users get native snap constraints inside their command loop, while web users access our full studio workspace featuring GLB model loading, multi-touch phone control, and real-time PBR material rendering. By replacing failing public relay proxies with local LAN SSE signaling (via `TouchController/signal-server.js`), mobile devices pair instantaneously over Wi-Fi with sub-millisecond input response.</p>
+    <p data-block="cadcraft_p_bulge_1">Our inspection of CADCraft's `crates/engine/src/cmd/pline_opts.rs` revealed how native polyline arc segments are stored. CADCraft uses the universal CAD bulge factor: `cadcraft_geom::arc_to_bulge` and `bulge_to_arc`.</p>
+    <p data-block="cadcraft_p_bulge_2">In AutoCAD and CADCraft's `LwPolyline`, every vertex is stored as `(x, y, bulge)`. When `bulge = 0.0`, the segment is a straight line. When `bulge != 0.0`, it encodes a circular arc whose included sweep angle is $\theta = 4 \arctan(\text{bulge})$ (positive for counter-clockwise, negative for clockwise). This is mathematically elegant: a single scalar encodes whether a segment is straight or an arc without allocating separate entities.</p>
+    <aside data-block="cadcraft_sidebar_bulge_math" data-type="sidebar">
+      <strong class="sidebar-title">bulge math</strong>
+      <p>The Bulge Factor tan(θ/4) Representation:</p>
+      <p>
+• Definition: `bulge = tan(θ / 4) = (2 * height) / chord_length`</p>
+      <p>
+• Advantages:</p>
+      <p>
+  1. Exact Geometry: Lossless round-tripping through DXF and binary DWG.</p>
+      <p>
+  2. Zero Allocation: A polyline with 50 arcs and lines is a single contiguous array of `(x, y, bulge)` tuples.</p>
+      <p>
+  3. SmartLine Parity: When SmartLine transitions from a line to an arc, it simply computes the tangent bulge and writes it to the prior vertex!</p>
+    </aside>
+    <p data-block="cadcraft_p_lisp_1">A fascinating discovery in CADCraft's command directory (`crates/engine/src/cmd/lisp.rs`) is an embedded AutoLISP evaluation engine implemented completely in pure Rust. Historically, AutoCAD's dominance in civil and architectural workflows was cemented by hundreds of thousands of legacy `.lsp` utility scripts.</p>
+    <p data-block="cadcraft_p_lisp_2">Because CADCraft parses and evaluates LISP S-expressions in-process, we can expose CompassDraw's constraint and coordinate functions directly as native AutoLISP primitives (e.g. `(compass-set-origin pt)`, `(compass-lock-axis "X" val)`, `(smartline-segment end-pt radius)`). Drafting automation routines can now leverage AccuDraw's 3D spatial alignment directly from script.</p>
+    <aside data-block="cadcraft_sidebar_lisp_architecture" data-type="sidebar">
+      <strong class="sidebar-title">lisp architecture</strong>
+      <p>CADCraft AutoLISP Engine (`crates/engine/src/cmd/lisp.rs`):</p>
+      <p>
+• In-Process S-Expression Evaluator: Parses and runs classic AutoLISP scripts without external C/ARX runtimes.</p>
+      <p>
+• Command Interception: Evaluates `(command "LINE" ...)` and routes inputs into `Session::command_line`.</p>
+      <p>
+• CompassDraw LISP Primitives:</p>
+      <p>
+  - `(cd:origin [x y z])`: Relocates the kinetic compass origin.</p>
+      <p>
+  - `(cd:plane 'top | 'front | 'side | matrix)`: Reorients the construction plane.</p>
+      <p>
+  - `(cd:smart-lock)`: Evaluates dynamic Smart Lock in script.</p>
+      <p>
+  - `(cd:smartline pts radii)`: Creates multi-segment tangent-arc polylines.</p>
+    </aside>
+    <p data-block="cadcraft_p_tax_1">Our inspection of `cadcraft-engine/src/cmd/constraints.rs` (1,175 lines) reveals how CADCraft organizes parametric rules. Following AutoCAD conventions, it partitions constraints into Geometric Constraints (GC) and Dimensional Constraints (DC), implemented via the `gc!` and `dc!` macros.</p>
+    <p data-block="cadcraft_p_tax_2">Each command takes parameters referencing entity handles (`h1`, `h2`) and geometric sub-elements (`"start"`, `"end"`, `"mid"`, `"center"`, `"seg<i>"`). When an edit occurs, the `after_command` hook calls the Levenberg-Marquardt solver in `cadcraft-constraints`, preserving all geometric rules while minimizing vertex displacement. By pairing CompassDraw with this pipeline, drafting gestures immediately convert into persistent parametric constraints.</p>
+    <aside data-block="cadcraft_sidebar_constraint_taxonomy" data-type="sidebar">
+      <strong class="sidebar-title">constraint taxonomy</strong>
+      <p>CADCraft Parametric Constraints Schema (cadcraft-doc & cmd/constraints.rs):</p>
+      <p>
+• Geometric Constraints (GC):</p>
+      <p>
+  - `GCCOINCIDENT`: Point-to-point or point-to-curve coincident latching.</p>
+      <p>
+  - `GCCOLINEAR`: Constrains lines to lie on the same infinite axis.</p>
+      <p>
+  - `GCCONCENTRIC`: Equal center points across circles and arcs.</p>
+      <p>
+  - `GCPARALLEL`: Parallel slope alignment.</p>
+      <p>
+  - `GCPERPENDICULAR`: Orthogonal 90° vector constraint.</p>
+      <p>
+  - `GCTANGENT`: Tangency across line-arc or curve-curve intersections.</p>
+      <p>
+  - `GCSMOOTH`: Continuous $G^2$ curvature tangency across splines.</p>
+      <p>
+  - `GCSYMMETRIC`: Mirror symmetry relative to an axis.</p>
+      <p>
+  - `GCEQUAL`: Equal length or radius matching.</p>
+      <p>
+  - `GCFIX`: Pins a vertex to an absolute world coordinate.</p>
+      <p>
+• Dimensional Constraints (DC):</p>
+      <p>
+  - `DCLINEAR`, `DCALIGNED`, `DCHORIZONTAL`, `DCVERTICAL`: Distance constraints.</p>
+      <p>
+  - `DCANGULAR`: Preserves angular relationships.</p>
+      <p>
+  - `DCRADIUS`, `DCDIAMETER`: Preserves circular dimensions.</p>
+    </aside>
+    <p data-block="cadcraft_p_accept_1">To understand how input is dispatched on the other side, we examine CADCraft's command loop in `crates/engine/src/cmd/draw.rs` and `session.rs`. Every interactive tool implements the `Interactive` trait, declaring an input state machine driven by `Prompt`:</p>
+    <p data-block="cadcraft_p_accept_1_sub">```rust</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+impl Interactive for LineM {</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+    fn prompt(&self) -> Prompt {</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+        match self.st {</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+            None => Prompt::new("Specify first point:").accepts(Accept::POINT),</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+            Some(_) => Prompt::new("Specify next point or [Close/Undo]:")</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+                .accepts(Accept::POINT | Accept::KEYWORD)</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+                .keywords(&["Close", "Undo"]),</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+        }</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+    }</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+    fn step(&mut self, s: &mut Session, input: Input) -> Result<Step>;</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+}</p>
+    <p data-block="cadcraft_p_accept_1_sub">
+```</p>
+    <p data-block="cadcraft_p_accept_1_sub">When a user clicks the mouse, the engine dispatches `Input::Point(Vec2)`. The command machine updates its internal vertex buffer and commits changes to the document database.</p>
+    <p data-block="cadcraft_p_accept_2">Our `PointInterceptor` hook sits in `crates/engine/src/session.rs` immediately above this event loop. Here is the exact runtime wiring:</p>
+    <p data-block="cadcraft_p_accept_2_sub">1. The OS window (`winit`) fires `WindowEvent::CursorMoved { position, .. }` or `MouseInput`.</p>
+    <p data-block="cadcraft_p_accept_2_sub">2. The camera unprojects the 2D cursor coordinate into a 3D ray `(ray_origin, ray_direction)` in WCS.</p>
+    <p data-block="cadcraft_p_accept_2_sub">3. `PointInterceptor::filter_point` tests the ray against CompassDraw's active construction plane $(\vec{P} - \vec{O}_c) \cdot \vec{Z}_c = 0$, evaluates active locks (`X`, `Y`, `Z`, `Dist`, `Angle`), and calculates snapping proximity.</p>
+    <p data-block="cadcraft_p_accept_2_sub">4. If constrained, it transforms the 3D coordinate into CADCraft's OCS plane `(u, v)` and hands `Input::Point(Vec2::new(u, v))` to `step(&mut self, s, input)`.</p>
+    <p data-block="cadcraft_p_accept_2_sub">5. The command receives a valid point on the very first frame without CADCraft ever pausing to display a modal prompt!</p>
+    <aside data-block="cadcraft_sidebar_accept_loop" data-type="sidebar">
+      <strong class="sidebar-title">accept loop</strong>
+      <p>End-to-End Event Wire-Up (winit ➔ AccuDraw ➔ CADCraft):</p>
+      <p>
+1. winit Window Event:</p>
+      <p>
+   • Receives physical mouse pixel (x, y) or keyboard character.</p>
+      <p>
+2. Camera Unprojection:</p>
+      <p>
+   • Generates 3D ray in World Space: ray = (ray_origin, ray_dir).</p>
+      <p>
+3. CompassDraw PointInterceptor:</p>
+      <p>
+   • Calculates plane intersection: P = ray_origin + t * ray_dir.</p>
+      <p>
+   • Applies AccuDraw delta: lx = (P - Origin) · X_c, ly = (P - Origin) · Y_c.</p>
+      <p>
+   • Applies SmartLock (L), numerical locks, or tentative vertex snaps.</p>
+      <p>
+4. Transform to CADCraft OCS:</p>
+      <p>
+   • u = (P_constrained - WCS_origin) · ax, v = (P_constrained - WCS_origin) · ay.</p>
+      <p>
+5. CADCraft Command Step:</p>
+      <p>
+   • Invokes cmd.step(&mut session, Input::Point(Vec2::new(u, v))).</p>
+      <p>
+   • Satisfies Accept::POINT instantly with zero command-line prompt lag!</p>
+    </aside>
+    <p data-block="cadcraft_p_plinem_1">To wire CompassDraw into CADCraft, we must understand how AutoCAD and CADCraft represent 3D geometry. CADCraft adopts AutoCAD's historical coordinate hierarchy:</p>
+    <p data-block="cadcraft_p_plinem_1_sub">1. **WCS (World Coordinate System):** The immutable 3D Cartesian frame $(X_w, Y_w, Z_w)$ shared by all entities.</p>
+    <p data-block="cadcraft_p_plinem_1_sub">2. **UCS (User Coordinate System):** A movable 3D frame with an origin $\vec{O}_{ucs}$ and orientation matrix. In legacy AutoCAD, moving the UCS was modal and cumbersome.</p>
+    <p data-block="cadcraft_p_plinem_1_sub">3. **OCS / ECS (Object/Entity Coordinate System):** An ingenious 2.5D storage optimization. Instead of storing bloated 3D $(x, y, z)$ coordinates for every node of a planar entity (`LWPOLYLINE`, `CIRCLE`, `ARC`, `HATCH`), CADCraft stores an **Extrusion Normal Vector** $\vec{N} = (N_x, N_y, N_z)$, an **Elevation** scalar $Z_e$, and compact 2D $(u, v)$ coordinates on that plane.</p>
+    <p data-block="cadcraft_p_plinem_1_sub">4. **DCS (Display Coordinate System):** The viewport projection space (orthographic or perspective) where 3D world geometry is mapped to 2D screen pixels.</p>
+    <p data-block="cadcraft_p_plinem_2">To convert between 2D OCS $(u, v)$ and 3D WCS $(X_w, Y_w, Z_w)$, CADCraft implements AutoCAD's **Arbitrary Axis Algorithm** in `crates/geom/src/mat.rs` via `Mat4::ocs(normal: Vec3)`. Given a unit normal $\vec{N}$:</p>
+    <p data-block="cadcraft_p_plinem_2_sub">• If $|N_x| < \frac{1}{64}$ and $|N_y| < \frac{1}{64}$, $\vec{A}_x = \vec{Y} \times \vec{N} = (0, 1, 0) \times \vec{N}$.</p>
+    <p data-block="cadcraft_p_plinem_2_sub">• Otherwise, $\vec{A}_x = \vec{Z} \times \vec{N} = (0, 0, 1) \times \vec{N}$.</p>
+    <p data-block="cadcraft_p_plinem_2_sub">• $\vec{A}_x = \text{normalize}(\vec{A}_x)$, and $\vec{A}_y = \vec{N} \times \vec{A}_x$.</p>
+    <p data-block="cadcraft_p_plinem_2_sub">The resulting matrix $[\\vec{A}_x, \\vec{A}_y, \\vec{N}]$ establishes an orthonormal basis on any angled face. When CompassDraw is active, our `ThreeAxes` $[\vec{X}_c, \\vec{Y}_c, \\vec{Z}_c]$ sets $\\vec{Z}_c = \\vec{N}$. Every 3D point $\\vec{P}$ resolved by AccuDraw is projected into CADCraft's OCS plane using $u = (\\vec{P} - \\vec{O}_w) \\cdot \\vec{A}_x$ and $v = (\\vec{P} - \\vec{O}_w) \\cdot \\vec{A}_y$. CADCraft saves the entity as a native `LwPolyline`, and standard AutoCAD renders the 3D angled geometry losslessly!</p>
+    <aside data-block="cadcraft_sidebar_plinem_pipeline" data-type="sidebar">
+      <strong class="sidebar-title">plinem pipeline</strong>
+      <p>AutoCAD / CADCraft Transformation Pipeline & OCS Derivation:</p>
+      <p>
+```rust</p>
+      <p>
+// In cadcraft-geom/src/mat.rs:</p>
+      <p>
+impl Mat4 {</p>
+      <p>
+    /// OCS (Object Coordinate System) Arbitrary Axis Algorithm.</p>
+      <p>
+    /// Maps 2D planar polyline vertices (u, v) into 3D World Space (X, Y, Z).</p>
+      <p>
+    pub fn ocs(normal: Vec3) -> Mat4 {</p>
+      <p>
+        let n = normal.normalized();</p>
+      <p>
+        let ax = if n.x.abs() < 1.0/64.0 && n.y.abs() < 1.0/64.0 {</p>
+      <p>
+            Vec3::Y.cross(n)</p>
+      <p>
+        } else {</p>
+      <p>
+            Vec3::Z.cross(n)</p>
+      <p>
+        }.normalized();</p>
+      <p>
+        let ay = n.cross(ax).normalized();</p>
+      <p>
+        Mat4 {</p>
+      <p>
+            m: [</p>
+      <p>
+                [ax.x, ay.x, n.x, 0.0],</p>
+      <p>
+                [ax.y, ay.y, n.y, 0.0],</p>
+      <p>
+                [ax.z, ay.z, n.z, 0.0],</p>
+      <p>
+                [0.0,  0.0,  0.0, 1.0],</p>
+      <p>
+            ],</p>
+      <p>
+        }</p>
+      <p>
+    }</p>
+      <p>
+}</p>
+      <p></p>
+      <p>// Mathematical Bridge to AccuDraw:</p>
+      <p>
+// 1. CompassDraw ThreeAxes sets: Z_c = normal (N)</p>
+      <p>
+// 2. 3D World Point P is projected into CADCraft OCS 2D:</p>
+      <p>
+//    u = (P - Origin) · ax</p>
+      <p>
+//    v = (P - Origin) · ay</p>
+      <p>
+// 3. Serializes as standard CADCraft LwPolyline:</p>
+      <p>
+//    PolyVertex { point: Vec2::new(u, v), bulge: tan(θ/4) }</p>
+      <p>
+```</p>
+      <p>
+• 100% AutoCAD Parity: Zero custom entities required; standard DWG/DXF readers open it in true 3D.</p>
+    </aside>
+    <p data-block="cadcraft_p_render_1">Our inspection of `crates/render/src/lib.rs` and `apps/cadcraft-desktop` confirms how CADCraft manages windowing and GPU dispatch. On desktop (macOS, Windows, Linux), CADCraft uses **`winit`** for OS window creation and the event pump, driving a **`wgpu`** surface (Metal on Mac, DirectX 12 on Windows, Vulkan on Linux) with **`cadcraft-ui-egui`** for toolbars and palettes.</p>
+    <p data-block="cadcraft_p_render_1_sub">Unlike WebGL viewports that use simple 2D canvas primitives or Three.js lines, CADCraft's native renderer tessellates linear entities into screen-space triangle strips directly on the GPU to maintain crisp, resolution-independent anti-aliased wireframes.</p>
+    <p data-block="cadcraft_p_render_2">To bring CompassDraw into CADCraft without altering its core renderer, we insert a dedicated **`CompassDrawOverlayPass`** at the tail of CADCraft's frame graph. After CADCraft draws its document entities into the primary texture view, our overlay pass executes with its own depth priority.</p>
+    <p data-block="cadcraft_p_render_2_sub">In 2D mode, this pass draws the squircle compass flat against the active working plane with orthographic projection. In 3D mode, it renders the 3-axis Mini-Jack, white index constraint lines, and tick cylinders in perspective. When running in a browser or Electron shell via `apps/cadcraft-web/src/host.rs`, this exact same render contract can be mirrored by our Three.js overlay via `postMessage`, giving draftspersons identical visual cues on desktop and web.</p>
+    <aside data-block="cadcraft_sidebar_render_wgpu" data-type="sidebar">
+      <strong class="sidebar-title">render wgpu</strong>
+      <p>Native Desktop wgpu & winit Pipeline Blueprint:</p>
+      <p>
+```rust</p>
+      <p>
+// crates/render/src/overlay.rs</p>
+      <p>
+pub struct CompassDrawOverlayPass {</p>
+      <p>
+    pipeline: wgpu::RenderPipeline,</p>
+      <p>
+    vertex_buffer: wgpu::Buffer,</p>
+      <p>
+    index_buffer: wgpu::Buffer,</p>
+      <p>
+    uniform_buffer: wgpu::Buffer, // Mat4 projection & view matrices</p>
+      <p>
+}</p>
+      <p></p>
+      <p>impl CompassDrawOverlayPass {</p>
+      <p>
+    pub fn render(</p>
+      <p>
+        &mut self,</p>
+      <p>
+        encoder: &mut wgpu::CommandEncoder,</p>
+      <p>
+        view: &wgpu::TextureView,</p>
+      <p>
+        compass_data: &CompassDrawVisualState,</p>
+      <p>
+    ) {</p>
+      <p>
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {</p>
+      <p>
+            label: Some("CompassDraw Overlay Pass"),</p>
+      <p>
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {</p>
+      <p>
+                view,</p>
+      <p>
+                resolve_target: None,</p>
+      <p>
+                ops: wgpu::Operations {</p>
+      <p>
+                    load: wgpu::LoadOp::Load, // Preserve CADCraft drawing!</p>
+      <p>
+                    store: wgpu::StoreOp::Store,</p>
+      <p>
+                },</p>
+      <p>
+            })],</p>
+      <p>
+            depth_stencil_attachment: None,</p>
+      <p>
+            timestamp_writes: None,</p>
+      <p>
+            occlusion_query_set: None,</p>
+      <p>
+        });</p>
+      <p>
+        // Renders squircle boundary, pulsing ticks, and Mini-Jack</p>
+      <p>
+        rpass.set_pipeline(&self.pipeline);</p>
+      <p>
+        rpass.draw(0..compass_data.vertex_count, 0..1);</p>
+      <p>
+    }</p>
+      <p>
+}</p>
+      <p>
+```</p>
+      <p>
+• Non-Destructive LoadOp::Load: Draws directly over CADCraft entities without clearing the color buffer.</p>
+      <p>
+• Resolution Independent: Uniform buffer recalculates on every winit Resized event.</p>
+    </aside>
+    <p data-block="cadcraft_p_osmode_1">Our inspection of `crates/engine/src/snap.rs` (1,189 lines) confirms CADCraft’s complete 14-bit OSMODE implementation: Endpoint (`1`), Midpoint (`2`), Center (`4`), Geometric Center (`1024`), Node (`8`), Quadrant (`16`), Intersection (`32`), Extension (`4096`), Insertion (`64`), Perpendicular (`128`), Tangent (`256`), Nearest (`512`), Apparent Intersection (`2048`), and Parallel (`8192`).</p>
+    <p data-block="cadcraft_p_osmode_2">In standard AutoCAD and CADCraft, these snap modes are purely passive: the mouse must hover directly over geometry, and pulling the mouse away immediately loses the coordinate. CompassDraw upgrades this into an **Active Spatial Anchor**:</p>
+    <p data-block="cadcraft_p_osmode_2_sub">A chorded click captures any active OSMODE vertex, anchors the floating compass origin, and renders the 3-axis Mini-Jack cursor. The draftsman is then free to pull the mouse away along locked axes or polar angles while maintaining the exact coordinate anchor point.</p>
+    <aside data-block="cadcraft_sidebar_osmode_table" data-type="sidebar">
+      <strong class="sidebar-title">osmode table</strong>
+      <p>CADCraft 14-Bit OSMODE Bitmask (crates/engine/src/snap.rs):</p>
+      <p>
+• `END: 1` (Endpoint), `MID: 2` (Midpoint), `CEN: 4` (Center)</p>
+      <p>
+• `GCEN: 1024` (Polyline centroid), `NOD: 8` (Point entity)</p>
+      <p>
+• `QUA: 16` (0°, 90°, 180°, 270° quadrant), `INT: 32` (Intersection)</p>
+      <p>
+• `PER: 128` (Normal 90° projection), `TAN: 256` (Curve tangency)</p>
+      <p>
+• `NEA: 512` (Closest point on curve), `PAR: 8192` (Parallel alignment)</p>
+      <p>
+• CompassDraw Upgrade: Converts passive proximity snapping into active floating spatial origin locks.</p>
+    </aside>
+    <p data-block="cadcraft_p_store_1">Our inspection of `cadcraft-doc/src/store.rs` confirms CADCraft's copy-on-write memory model (`EntityStore`). In traditional CAD databases, undo/redo stacks require heavy deep-cloning of entire drawing trees or complex reverse-delta journals that easily desynchronize after topological edits.</p>
+    <p data-block="cadcraft_p_store_2">In CADCraft, entities are immutable records indexed by generational handles (`Handle`). Taking an undo snapshot is a cheap pointer clone of the `EntityStore`. Modifying an entity creates a localized copy-on-write branch. This provides instant multi-level undo/redo during rapid CompassDraw drafting sessions with zero garbage collection overhead.</p>
+    <aside data-block="cadcraft_sidebar_store_architecture" data-type="sidebar">
+      <strong class="sidebar-title">store architecture</strong>
+      <p>EntityStore Memory Architecture (cadcraft-doc/src/store.rs):</p>
+      <p>
+• Generational Handles: `Handle(u32)` eliminates dangling pointers and protects against iterator invalidation.</p>
+      <p>
+• Copy-on-Write (CoW): Entire drawing states clone in sub-microsecond time as pointer copies.</p>
+      <p>
+• Transaction Safety: Tool commands commit clean transactional deltas (`s.doc_mut()?.modify_entity(...)`).</p>
+      <p>
+• Zero Upstream Drift: CompassDraw emits standard entities via handles without modifying store internals.</p>
+    </aside>
+    <p data-block="cadcraft_p_hazard_overview">When building a precision 3D CAD engine on top of AutoCAD data structures, simple vector math often fails at edge cases. Because CAD systems rely on zero-tolerance geometric invariants, minor mathematical discontinuities cause catastrophic visual glitches: polylines suddenly rotating 90 degrees when tilted past vertical, infinite tangents on circular arcs, and snap cursors jumping into empty background space.</p>
+    <p data-block="cadcraft_p_hazard_overview_sub">In this section, we document the four most dangerous engineering hazards discovered during our code audit of CADCraft and AutoCAD DXF specifications, and provide the exact algorithms used by `compassdraw-core` to resolve them.</p>
+    <aside data-block="cadcraft_sidebar_arbitrary_axis_hazard" data-type="sidebar">
+      <strong class="sidebar-title">arbitrary axis hazard</strong>
+      <p>Hazard 1: The OCS Arbitrary Axis 1/64 Discontinuity Jump:</p>
+      <p>
+• The Trap:</p>
+      <p>
+  - AutoCAD's Arbitrary Axis Algorithm switches reference cross-vectors when $|N_x| < 1/64$ and $|N_y| < 1/64$.</p>
+      <p>
+  - If a surface normal tilts across this boundary, $\vec{A}_x$ abruptly jumps by $90^\circ$ from $(0, 1, 0) \times \vec{N}$ to $(0, 0, 1) \times \vec{N}$.</p>
+      <p>
+  - Naive CAD importers experience an instant $90^\circ$ rotation of polylines!</p>
+      <p>
+• The compassdraw-core Solution:</p>
+      <p>
+  1. AccuDraw's `ThreeAxes` basis $[\vec{X}_c, \vec{Y}_c, \vec{Z}_c]$ maintains continuous orientation throughout interaction.</p>
+      <p>
+  2. At export time, we derive OCS basis $[\vec{A}_x, \vec{A}_y, \vec{N}] = \text{Mat4::ocs}(\vec{Z}_c)$.</p>
+      <p>
+  3. We calculate phase offset angle $\phi = \text{atan2}(\vec{X}_c \cdot \vec{A}_y, \vec{X}_c \cdot \vec{A}_x)$.</p>
+      <p>
+  4. Every 2D vertex $(u, v)$ is rotated by $-\phi$ before writing to `PolyVertex`.</p>
+      <p>
+  - Result: When AutoCAD applies `Mat4::ocs`, the $90^\circ$ axis jump is exactly cancelled out by $-\phi$, keeping the polyline stationary in 3D world space!</p>
+    </aside>
+    <p data-block="cadcraft_p_hazard_apparent_skew">The second hazard occurs during snapping in 3D perspective views. In 2D drafting, any two non-parallel lines intersect at a point. In 3D space, two line entities almost never intersect—they are **skew lines** separated by an arbitrary 3D distance vector.</p>
+    <p data-block="cadcraft_p_hazard_apparent_skew_sub">On a 2D computer monitor, their visual screen projections cross. If an interactive snap engine naively tests for raycast intersections, it latches onto one of the background vertices. This immediately pulls the AccuDraw compass off its active construction plane, disrupting the user's working depth.</p>
+    <aside data-block="cadcraft_sidebar_apparent_skew_hazard" data-type="sidebar">
+      <strong class="sidebar-title">apparent skew hazard</strong>
+      <p>Hazard 2: 3D Skew Lines vs. Apparent 2D Crossings:</p>
+      <p>
+• The Trap:</p>
+      <p>
+  - Two lines $L_1$ and $L_2$ appear to cross on screen, but have minimum distance $d > 0$ in 3D world space.</p>
+      <p>
+  - Naive snapping picks the 3D coordinate of $L_1$ or $L_2$, yanking the working plane off onto background geometry.</p>
+      <p>
+• The compassdraw-core Solution (Active Plane Discipline):</p>
+      <p>
+  1. The user's active construction plane is governed by plane point $\vec{O}_c$ and normal $\vec{Z}_c$.</p>
+      <p>
+  2. Lines $L_1$ and $L_2$ are projected onto the active plane along the plane normal $\vec{Z}_c$ (or camera view ray if in View mode `V`).</p>
+      <p>
+  3. The intersection point $\vec{P}_{\text{int}}$ is solved strictly in the 2D plane coordinate system.</p>
+      <p>
+  - Result: Snapping to apparent intersections never pulls the compass off its active working depth.</p>
+    </aside>
+    <aside data-block="cadcraft_sidebar_bulge_singularity_hazard" data-type="sidebar">
+      <strong class="sidebar-title">bulge singularity hazard</strong>
+      <p>Hazard 3: The 360° Bulge Singularity & Tangency Deadband:</p>
+      <p>
+• Semicircle: Sweep $\theta = 180^\circ \implies \text{bulge} = \tan(45^\circ) = 1.0$.</p>
+      <p>
+• Full Circle Singularity: As sweep $\theta \to 360^\circ$, $\theta/4 \to 90^\circ$, so $\text{bulge} = \tan(90^\circ) \to \infty$ (`f64::INFINITY`).</p>
+      <p>
+  - A full circle CANNOT be represented as a single `PolyVertex` segment in AutoCAD DXF.</p>
+      <p>
+  - Solution: If an arc sweep exceeds $359.9^\circ$, SmartLine automatically splits it into two $180^\circ$ segments (both $\text{bulge} = 1.0$), or commits a native `cadcraft-doc::Circle`.</p>
+      <p>
+• Straight Line Deadband: Hand jitter can emit $\text{bulge} = 0.0000002$, causing micro-curvature artifacts.</p>
+      <p>
+  - Solution: Enforce deadband threshold: if $|\text{bulge}| < 10^{-5}$, clamp $\text{bulge} = 0.0$.</p>
+    </aside>
+    <aside data-block="cadcraft_sidebar_dpi_scaling_hazard" data-type="sidebar">
+      <strong class="sidebar-title">dpi scaling hazard</strong>
+      <p>Hazard 4: Retina & High-DPI Snap Aperture Scaling:</p>
+      <p>
+• The Trap:</p>
+      <p>
+  - macOS Retina and 4K displays have device pixel ratios of 2.0x or 3.0x.</p>
+      <p>
+  - A fixed 10-pixel snap aperture becomes an ultra-tiny 5-pixel target on Retina screens.</p>
+      <p>
+• The compassdraw-core Solution:</p>
+      <p>
+  - Screen-space picking threshold in `winit` is multiplied by `window.scale_factor()`.</p>
+      <p>
+  - Guarantees uniform physical finger and mouse picking tolerances across 1080p, 4K, and Retina displays.</p>
+    </aside>
+    <p data-block="cadcraft_p_bridge_paradigm_1">To make AccuDraw feel completely native inside an AutoCAD runtime like CADCraft, we must solve a profound interaction conflict. Historically, AutoCAD is a **prompt-driven** engine: tools like `LINE` and `PLINE` sit in a passive waiting loop, printing prompts like `'Specify next point or [Arc/Close/Undo]:'` and expecting typed coordinates or keywords followed by Enter.</p>
+    <p data-block="cadcraft_p_bridge_paradigm_1_sub">AccuDraw is a **kinetic, event-driven HUD**: it floats an origin at the cursor, locks axes on the fly, and computes relative vector displacements in real time. If we treated AutoCAD as a black box and simply simulated keystrokes, the interface would feel clunky. The breakthrough in our architecture is making **CADCraft's command prompt a reactive event listener for AccuDraw**.</p>
+    <aside data-block="cadcraft_sidebar_two_way_contract" data-type="sidebar">
+      <strong class="sidebar-title">two way contract</strong>
+      <p>The Bi-Directional Dialogue (CADCraft ↔ CompassDraw):</p>
+      <p>
+1. AutoCAD to CompassDraw (Reverse Context Dialogue):</p>
+      <p>
+   • When a command steps and returns `Step::Next(Prompt)`:</p>
+      <p>
+     - If `prompt.accepts.contains(Accept::POINT)`: CompassDraw wakes up, places the squircle compass, and tracks cursor deltas.</p>
+      <p>
+     - If `prompt.keywords` contains `["Arc", "Close", "Undo"]`: CompassDraw maps single-stroke shortcuts (`A`, `C`, `U`) directly to those keywords without requiring Enter!</p>
+      <p>
+     - When AutoCAD commits a point: `on_point_committed(pt)` automatically shifts the floating origin to `pt`, resets local deltas to 0.0000, and pushes the coordinate to the undo stack.</p>
+      <p>
+2. CompassDraw to AutoCAD (Forward Coordinate Synthesis):</p>
+      <p>
+   • Resolves constraints in 3D world space (WCS), projects to active construction plane, and dispatches `Input::Point(Vec2)`.</p>
+      <p>
+   • If user types a pure scalar distance (e.g. `12.5`): Evaluates directional sign inference and passes `Input::Point` along the locked axis without opening a text prompt.</p>
+      <p>
+3. Undo Synchronization:</p>
+      <p>
+   • When AutoCAD executes `s.doc_mut()?.undo()`: CompassDraw pops its `SavedState` stack in lockstep, returning the compass origin to the prior vertex.</p>
+    </aside>
+    <p data-block="cadcraft_p_bridge_paradigm_2">On the data side, we keep the coordinate system clean and high-level. Tools, scripts, and AI coding agents should never have to manually write out matrix equations to place a line or arc. In `compassdraw-core`, we define a universal **`CoordinateBridge`**.</p>
+    <p data-block="cadcraft_p_bridge_paradigm_2_sub">The `CoordinateBridge` operates on pure, unadorned `[f64; 3]` arrays. It provides instantaneous bidirectional translations between **World Coordinates (WCS)**, **Local Compass Deltas $(dx, dy, dz)$**, **AutoCAD Planar Object Coordinates (OCS)**, and **Screen Pixels (DCS)**. Whether a developer is working with raw numbers in Rust, Three.js vectors in a browser, or DXF bulge factors, the coordinate engine handles all projection math under the hood.</p>
+    <aside data-block="cadcraft_sidebar_coordinate_translation_math" data-type="sidebar">
+      <strong class="sidebar-title">coordinate translation math</strong>
+      <p>Universal CoordinateBridge Architecture (crates/compassdraw-core):</p>
+      <p>
+```rust</p>
+      <p>
+pub struct CoordinateBridge;</p>
+      <p></p>
+      <p>impl CoordinateBridge {</p>
+      <p>
+    /// World Coordinate (WCS) -> Local Compass Delta (dx, dy, dz)</p>
+      <p>
+    #[inline]</p>
+      <p>
+    pub fn wcs_to_compass(p_wcs: [f64; 3], origin: [f64; 3], axes: &ThreeAxes) -> [f64; 3] {
+</p>
+    </aside>
+  </section>
+</article>
