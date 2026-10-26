@@ -39,146 +39,170 @@ class CommentNode {
     }
 
   render() {
-      if (this.domElement) return this.domElement;
+    if (this.domElement) return this.domElement;
 
-      if (this.isTemporary) {
-        return this.renderTemporaryReplyBox();
-      }
-
-      const tier = this.prominence >= 80 ? 'high' : (this.prominence <= 35 ? 'diminished' : 'normal');
-
-      this.domElement = makeElement('div', {
-        className: `comment-node`,
-        'data-node-id': this.id,
-        'data-prominence': tier
-      });
-
-      // Add click handler to expand the comment if it's collapsed.
-      this.domElement.onclick = () => {
-        if (this.isCollapsed) {
-          this.setCollapsed(false);
-          this.view.refreshLayout();
-        }
-      };
-
-      this.domElement.classList.toggle('is-deleted', this.isDeleted);
-      this.domElement.classList.toggle('is-collapsed', this.isCollapsed);
-
-      const currentUser = this.view.options.app.currentUser;
-      if (currentUser && this.userId === currentUser.id) {
-        this.domElement.classList.add('is-own-comment');
-      }
-
-      this.toggleElement = makeElement('span', { className: 'node-toggle' });
-      if (this.children.length > 0) {
-        this.updateToggleIcon();
-        this.toggleElement.onclick = (e) => {
-          e.stopPropagation();
-          this.toggleExpandCollapse();
-        };
-      }
-
-      const user = this.view.options.app.userManager.getUserById(this.userId);
-      const commentBody = makeElement('div', {
-        className: 'comment-content-wrapper',
-      });
-
-      if (user && user.avatarUrl) {
-        const avatar = makeElement('img', {
-          className: 'comment-avatar',
-          src: user.avatarUrl,
-          alt: `${user.displayName}'s avatar`,
-        });
-        commentBody.appendChild(avatar);
-      }
-
-      const header = makeElement('div', { className: 'comment-header' });
-      const headerContent = makeElement('div', {
-        className: 'comment-header-content',
-      });
-
-      if (user && !this.isDeleted) {
-        const nameSpan = makeElement('span', { className: 'user-name' });
-        nameSpan.innerHTML = NameRenderer.render(user.displayName);
-        headerContent.appendChild(nameSpan);
-        if (this.view.options.app.userManager.isDuplicate(user.normalizedName)) {
-          nameSpan.appendChild(
-            makeElement('span', { className: 'user-name-suffix' }, user.suffix)
-          );
-        }
-      } else if (!this.isDeleted) {
-        headerContent.textContent = 'Unknown User';
-      }
-
-      headerContent.appendChild(
-        makeElement(
-          'span',
-          { className: 'comment-timestamp' },
-          this.formatTimestamp()
-        )
-      );
-
-      // Prominence Tag Indicator
-      this.prominenceBadge = makeElement('span', {
-        className: 'comment-prominence-tag',
-        title: 'Reputation-Weighted Prominence Score'
-      }, `${this.prominence}% Prominence`);
-      headerContent.appendChild(this.prominenceBadge);
-
-      this.textPreviewElement = makeElement('span', {
-        className: 'comment-text-preview',
-      });
-      this.updateTextPreview();
-      headerContent.appendChild(this.textPreviewElement);
-
-      this.debugInfoElement = makeElement('span', {
-        className: 'comment-debug-info',
-      });
-      headerContent.appendChild(this.debugInfoElement);
-
-      const textContent = this.isDeleted ? '[message deleted]' : this.text;
-      const text = makeElement('div', { className: 'comment-text' }, textContent);
-      const actions = makeElement('div', { className: 'comment-actions' });
-
-      if (!this.isDeleted) {
-        const replyButton = makeElement(
-          'button',
-          { onclick: () => this.showReplyBox() },
-          'Reply'
-        );
-        const rateButton = makeElement(
-          'button',
-          { onclick: (e) => this.toggleRatingPanel(e.currentTarget) },
-          'Rate / Prominence'
-        );
-        rateButton.closePanelCallback = () => {
-          this.ratingPanel = null;
-          this.domElement.classList.remove('is-rating');
-        };
-        actions.append(replyButton, rateButton);
-        if (currentUser && this.userId === currentUser.id) {
-          const editButton = makeElement(
-            'button',
-            { className: 'edit-button' },
-            'Edit'
-          );
-          const deleteButton = makeElement(
-            'button',
-            { className: 'delete-button', onclick: () => this.handleDelete() },
-            'Delete'
-          );
-          actions.append(editButton, deleteButton);
-        }
-      }
-
-      const connector = makeElement('div', { className: 'header-connector' });
-      header.append(headerContent, connector, actions);
-
-      commentBody.append(header, text);
-      this.domElement.append(this.toggleElement, commentBody);
-      this.updateVisualState();
-      return this.domElement;
+    if (this.isTemporary) {
+      return this.renderTemporaryReplyBox();
     }
+
+    // Calculate prominence tier
+    const tier = this.prominence >= 80 ? 'high' : (this.prominence <= 45 ? 'diminished' : 'normal');
+
+    this.domElement = makeElement('div', {
+      className: `comment-node`,
+      'data-node-id': this.id,
+      'data-prominence': tier
+    });
+
+    this.domElement.onclick = () => {
+      if (this.isCollapsed) {
+        this.setCollapsed(false);
+        this.view.refreshLayout();
+      }
+    };
+
+    this.domElement.classList.toggle('is-deleted', this.isDeleted);
+    this.domElement.classList.toggle('is-collapsed', this.isCollapsed);
+
+    const currentUser = this.view.options.app.currentUser;
+    if (currentUser && this.userId === currentUser.id) {
+      this.domElement.classList.add('is-own-comment');
+    }
+
+    this.toggleElement = makeElement('span', { className: 'node-toggle' });
+    if (this.children.length > 0) {
+      this.updateToggleIcon();
+      this.toggleElement.onclick = (e) => {
+        e.stopPropagation();
+        this.toggleExpandCollapse();
+      };
+    }
+
+    const user = this.view.options.app.userManager.getUserById(this.userId);
+    const commentBody = makeElement('div', {
+      className: 'comment-content-wrapper',
+    });
+
+    if (user && user.avatarUrl) {
+      const avatar = makeElement('img', {
+        className: 'comment-avatar',
+        src: user.avatarUrl,
+        alt: `${user.displayName}'s avatar`,
+      });
+      commentBody.appendChild(avatar);
+    }
+
+    const header = makeElement('div', { className: 'comment-header' });
+    const headerContent = makeElement('div', {
+      className: 'comment-header-content',
+    });
+
+    if (user && !this.isDeleted) {
+      const nameSpan = makeElement('span', { className: 'user-name' });
+      nameSpan.innerHTML = NameRenderer.render(user.displayName);
+      headerContent.appendChild(nameSpan);
+
+      // Tag / Discriminator
+      const tagVal = user.suffix || (typeof CommunityOracle !== 'undefined' ? CommunityOracle.getProfile(user.id)?.tag : 1001);
+      if (tagVal) {
+        nameSpan.appendChild(
+          makeElement('span', {
+            className: 'user-name-suffix',
+            style: { marginLeft: '4px', opacity: '0.6', fontSize: '10px', fontFamily: 'monospace' }
+          }, `#${tagVal}`)
+        );
+      }
+
+      // Community Badges
+      const badges = user.badges || (typeof CommunityOracle !== 'undefined' ? CommunityOracle.getProfile(user.id)?.badges : []);
+      if (Array.isArray(badges) && badges.length > 0) {
+        badges.forEach(b => {
+          headerContent.appendChild(makeElement('span', {
+            style: {
+              background: 'rgba(56, 189, 248, 0.15)',
+              color: '#38bdf8',
+              fontSize: '9px',
+              padding: '1px 5px',
+              borderRadius: '4px',
+              fontFamily: 'monospace',
+              fontWeight: 'bold'
+            }
+          }, b));
+        });
+      }
+    } else if (!this.isDeleted) {
+      headerContent.textContent = 'Unknown User';
+    }
+
+    headerContent.appendChild(
+      makeElement(
+        'span',
+        { className: 'comment-timestamp' },
+        this.formatTimestamp()
+      )
+    );
+
+    // Prominence & Reputation Indicator
+    this.prominenceBadge = makeElement('span', {
+      className: 'comment-prominence-tag',
+      title: 'PageRank Prominence Weight'
+    }, `${this.prominence}% Prominence`);
+    headerContent.appendChild(this.prominenceBadge);
+
+    this.textPreviewElement = makeElement('span', {
+      className: 'comment-text-preview',
+    });
+    this.updateTextPreview();
+    headerContent.appendChild(this.textPreviewElement);
+
+    this.debugInfoElement = makeElement('span', {
+      className: 'comment-debug-info',
+    });
+    headerContent.appendChild(this.debugInfoElement);
+
+    const textContent = this.isDeleted ? '[message deleted]' : this.text;
+    const text = makeElement('div', { className: 'comment-text' }, textContent);
+    const actions = makeElement('div', { className: 'comment-actions' });
+
+    if (!this.isDeleted) {
+      const replyButton = makeElement(
+        'button',
+        { onclick: () => this.showReplyBox() },
+        'Reply'
+      );
+      const rateButton = makeElement(
+        'button',
+        { onclick: (e) => this.toggleRatingPanel(e.currentTarget) },
+        'Rate / Prominence'
+      );
+      rateButton.closePanelCallback = () => {
+        this.ratingPanel = null;
+        this.domElement.classList.remove('is-rating');
+      };
+      actions.append(replyButton, rateButton);
+      if (currentUser && this.userId === currentUser.id) {
+        const editButton = makeElement(
+          'button',
+          { className: 'edit-button' },
+          'Edit'
+        );
+        const deleteButton = makeElement(
+          'button',
+          { className: 'delete-button', onclick: () => this.handleDelete() },
+          'Delete'
+        );
+        actions.append(editButton, deleteButton);
+      }
+    }
+
+    const connector = makeElement('div', { className: 'header-connector' });
+    header.append(headerContent, connector, actions);
+
+    commentBody.append(header, text);
+    this.domElement.append(this.toggleElement, commentBody);
+    this.updateVisualState();
+    return this.domElement;
+  }
   showReplyBox() {
     const app = this.view.options.app;
     const tempReplyId = `temp-reply-${this.id}`;

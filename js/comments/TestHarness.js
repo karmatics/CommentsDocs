@@ -316,80 +316,103 @@ class TestHarness {
   }
 
   showUserSwitcherDialog() {
-    const content = makeElement('div', { id: 'user-dialog-content' });
-    const userList = makeElement('div', { className: 'user-list' });
-    let dialog; // Declare here to be in scope for loginAs helper
+    const content = makeElement('div', { id: 'user-dialog-content', style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+    const userList = makeElement('div', { className: 'user-list', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' } });
+    let dialog;
 
-    const loginAs = async (displayName) => {
-      // This helper now handles both switching and creating by calling the API,
-      // which will establish a server session in 'live' mode.
-      const result = await this.app.serverAPI.getOrCreateUser(displayName);
+    const loginAs = async (displayName, userId) => {
+      let result = null;
+      if (typeof CommunityOracle !== 'undefined' && userId) {
+        const prof = CommunityOracle.getProfile(userId);
+        result = {
+          success: true,
+          user: {
+            id: prof.id,
+            displayName: prof.name,
+            normalizedName: prof.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+            suffix: prof.tag,
+            reputation: prof.reputation,
+            badges: prof.badges || []
+          }
+        };
+      } else {
+        result = await this.app.serverAPI.getOrCreateUser(displayName);
+      }
+
       if (result.success && result.user) {
         this.app.userManager.addUser(result.user);
         this.app.setCurrentUser(result.user);
         this.updateUserDisplay();
         if (dialog) dialog.close();
       } else {
-        alert(
-          `Failed to log in as '${displayName}': ${
-            result.error || 'Unknown error'
-          }`
-        );
+        alert(`Failed to assume identity: ${result.error || 'Unknown error'}`);
       }
     };
 
-    this.app.userManager.getAllUsers().forEach((user) => {
-      let buttonLabel = user.displayName;
-      if (this.app.userManager.isDuplicate(user.normalizedName)) {
-        buttonLabel += user.suffix;
-      }
-      const btn = makeElement(
-        'button',
-        {
-          onclick: () => loginAs(user.displayName),
+    // Populate profiles directly from CommunityOracle
+    const profiles = (typeof CommunityOracle !== 'undefined')
+      ? CommunityOracle.getAllProfiles()
+      : this.app.userManager.getAllUsers();
+
+    profiles.forEach(p => {
+      const repPct = Math.round((p.reputation || 0.5) * 100);
+      const tag = p.tag || p.suffix || 1001;
+      const name = p.name || p.displayName || 'User';
+
+      const btn = makeElement('button', {
+        style: {
+          background: 'rgba(255, 255, 255, 0.04)',
+          border: '1px solid #1e293b',
+          borderRadius: '6px',
+          padding: '8px 10px',
+          color: '#f8fafc',
+          cursor: 'pointer',
+          textAlign: 'left',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px'
         },
-        buttonLabel
-      );
+        onclick: () => loginAs(name, p.id)
+      }, [
+        makeElement('strong', { style: { color: '#00f2fe', fontSize: '12px' } }, `${name} #${tag}`),
+        makeElement('span', { style: { color: '#10b981', fontSize: '10px', fontFamily: 'monospace' } }, `${repPct}% Rep Weight`)
+      ]);
       userList.appendChild(btn);
     });
 
-    const form = makeElement('form', { className: 'create-user-form' });
+    const form = makeElement('form', { className: 'create-user-form', style: { display: 'flex', gap: '8px', borderTop: '1px solid #1e293b', paddingTop: '12px' } });
     const nameInput = makeElement('input', {
       type: 'text',
-      placeholder: 'Enter new name (letters only, 3+)',
-      pattern: '^[a-zA-Z]{3,}$', // Match server validation
+      placeholder: 'New Community Name...',
+      pattern: '^[a-zA-Z]{3,}$',
       required: true,
+      style: { flex: 1, padding: '8px 10px', background: '#090d16', color: '#fff', border: '1px solid #232d3f', borderRadius: '4px' }
     });
-    const createButton = makeElement(
-      'button',
-      { type: 'submit' },
-      'Create & Use'
-    );
+    const createButton = makeElement('button', { type: 'submit', className: 'post-button' }, 'Add to Community');
 
     form.append(nameInput, createButton);
     form.onsubmit = async (e) => {
       e.preventDefault();
       if (nameInput.checkValidity()) {
         createButton.disabled = true;
-        createButton.textContent = 'Creating...';
         await loginAs(nameInput.value.trim());
-        // Re-enable button in case of failure
-        createButton.disabled = false;
-        createButton.textContent = 'Create & Use';
       }
     };
 
-    content.append(makeElement('h3', {}, 'Select a user:'), userList, form);
+    content.append(
+      makeElement('h3', { style: { margin: 0, fontSize: '14px', color: '#00f2fe' } }, 'Select Community Identity (Web of Trust):'),
+      userList,
+      form
+    );
 
     dialog = new DialogBoxExtended({
-      title: 'User Selection',
+      title: '🌐 Community Identity Selector',
       content: content,
-      buttons: [{ label: 'Close' }],
+      buttons: [{ label: 'Close', isCloseButton: true }]
     });
 
-    setTimeout(() => nameInput.focus(), 50);
+    setTimeout(() => nameInput.focus(), 60);
   }
-
   updateUserDisplay() {
     if (!this.userSwitcherDisplay) return;
     const user = this.app.currentUser;

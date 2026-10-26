@@ -27,43 +27,107 @@ class UserManager {
       return null;
     }
 
-    const normalized = this._normalizeName(displayName);
-    const existingUsers = this.usersByNormalizedName.get(normalized) || [];
+    // Delegate directly to CommunityOracle
+    if (typeof CommunityOracle !== 'undefined') {
+      const existing = CommunityOracle.getAllProfiles().find(
+        p => p.name.toLowerCase() === displayName.toLowerCase()
+      );
+      if (existing) {
+        const userObj = {
+          id: existing.id,
+          displayName: existing.name,
+          normalizedName: this._normalizeName(existing.name),
+          suffix: existing.tag,
+          reputation: existing.reputation,
+          badges: existing.badges || []
+        };
+        this.addUser(userObj);
+        return userObj;
+      }
 
-    // Check if a user with this exact display name already exists
-    const existingUser = existingUsers.find(
-      (u) => u.displayName === displayName
-    );
-    if (existingUser) {
-      return existingUser;
+      const created = CommunityOracle.addOrUpdateProfile({ name: displayName });
+      const userObj = {
+        id: created.id,
+        displayName: created.name,
+        normalizedName: this._normalizeName(created.name),
+        suffix: created.tag,
+        reputation: created.reputation,
+        badges: created.badges || []
+      };
+      this.addUser(userObj);
+      return userObj;
     }
 
-    // Create a new user
-    const suffix = existingUsers.length + 1;
-    const id = `${normalized}${suffix}`;
+    // Fallback to internal map
+    const normalized = this._normalizeName(displayName);
+    const existingUsers = this.usersByNormalizedName.get(normalized) || [];
+    const existingUser = existingUsers.find(u => u.displayName === displayName);
+    if (existingUser) return existingUser;
 
+    const suffix = existingUsers.length + 1001;
+    const id = `${normalized}${suffix}`;
     const newUser = {
-      id: id,
-      displayName: displayName, // Preserve original casing
+      id,
+      displayName,
       normalizedName: normalized,
-      suffix: suffix,
+      suffix,
+      reputation: 0.50,
+      badges: ['Contributor']
     };
 
-    existingUsers.push(newUser);
-    this.usersByNormalizedName.set(normalized, existingUsers);
-    this.usersById.set(id, newUser);
-
+    this.addUser(newUser);
     return newUser;
   }
 
   getUserById(id) {
-    return this.usersById.get(id);
+    if (this.usersById.has(id)) {
+      return this.usersById.get(id);
+    }
+
+    if (typeof CommunityOracle !== 'undefined') {
+      const prof = CommunityOracle.getProfile(id);
+      if (prof) {
+        const user = {
+          id: prof.id,
+          displayName: prof.name,
+          normalizedName: this._normalizeName(prof.name),
+          suffix: prof.tag,
+          reputation: prof.reputation,
+          badges: prof.badges || []
+        };
+        this.addUser(user);
+        return user;
+      }
+    }
+
+    return {
+      id: id || 'unknown',
+      displayName: 'Anonymous',
+      normalizedName: 'anonymous',
+      suffix: 1099,
+      reputation: 0.25,
+      badges: ['Guest']
+    };
   }
 
   getAllUsers() {
+    if (typeof CommunityOracle !== 'undefined') {
+      const profiles = CommunityOracle.getAllProfiles();
+      profiles.forEach(p => {
+        if (!this.usersById.has(p.id)) {
+          this.addUser({
+            id: p.id,
+            displayName: p.name,
+            normalizedName: this._normalizeName(p.name),
+            suffix: p.tag,
+            reputation: p.reputation,
+            badges: p.badges || []
+          });
+        }
+      });
+    }
     return Array.from(this.usersById.values());
   }
-
   isDuplicate(normalizedName) {
     const users = this.usersByNormalizedName.get(normalizedName);
     return users && users.length > 1;

@@ -57,12 +57,11 @@ class CommentsDomAnchorContent {
   }
 
   static p_anchor_2() {
-    return [
-      "The critical engineering challenge is **locator resilience across document revisions**. If an author edits a paragraph or adds a new heading, naive line-number or index-based locators break instantly.",
-      "We solve this with our **4-Tier Resilient Locator Hierarchy** implemented in `CadPlanDataRegistry.js` and `CadPlanItemNotes.js`. The engine first searches for explicit semantic identifiers (`data-block`, `data-block-id`, `data-id`). If none exists, it evaluates persistent DOM IDs. If the target is an arbitrary text span or unlabelled container, it computes an invariant full XPath from `body`, hashing the string into a compact 32-bit alphanumeric token (`elem_p_a3b9f`)."
-    ];
-  }
-
+      return [
+        "The critical engineering challenge is **locator resilience across document revisions**. If an author edits a paragraph or adds a new heading, naive line-number or index-based locators break instantly.",
+        "We solve this with our **4-Tier Resilient Locator Hierarchy** implemented in `CommentsDataRegistry.js` and `CommentsItemNotes.js`. The engine first searches for explicit semantic identifiers (`data-block`, `data-block-id`, `data-id`). If none exists, it evaluates persistent DOM IDs. If the target is an arbitrary text span or unlabelled container, it computes an invariant full XPath from `body`, hashing the string into a compact 32-bit alphanumeric token (`elem_p_a3b9f`)."
+      ];
+    }
   static sidebar_locator_hierarchy() {
     return [
       "The 4-Tier Resilient Locator Contract:\n" +
@@ -74,12 +73,11 @@ class CommentsDomAnchorContent {
   }
 
   static p_aardvark_traversal_1() {
-    return [
-      "To let users select any element without clicking miniature buttons or struggling with hit targets, we integrate **Aardvark** (`CadPlanAardvark.js`).",
-      "Activating Aardvark (via the header button or `Ctrl+Shift+A`) enters spatial inspection mode: a high-contrast red outline and yellow `<tag>` label hover smoothly over elements as the mouse glides across the document. To select an entire section or parent container, the user simply taps **`W` (Wider)**. To drill back down into an individual sentence or badge, they tap **`N` (Narrower)**."
-    ];
-  }
-
+      return [
+        "To let users select any element without clicking miniature buttons or struggling with hit targets, we integrate **Aardvark** (`CommentsAardvark.js`).",
+        "Activating Aardvark (via the header button or `Ctrl+Shift+A`) enters spatial inspection mode: a high-contrast cyber-cyan outline and `<tag>` label hover smoothly over elements as the mouse glides across the document. To select an entire section or parent container, the user simply taps **`W` (Wider)**. To drill back down into an individual sentence or badge, they tap **`N` (Narrower)**."
+      ];
+    }
   static p_aardvark_traversal_2() {
     return [
       "Once the desired element is highlighted, pressing **`C`** or **`M`** immediately locks the selection and opens the comment dialog. Selection locking ensures that the hover frame freezes in place, dialog controls receive exclusive focus, and background mouse motion no longer moves the target.",

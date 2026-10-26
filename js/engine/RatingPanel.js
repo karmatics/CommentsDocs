@@ -214,26 +214,37 @@ class RatingPanel {
   async submitRating() {
     const app = this.commentNode.view.options.app;
     if (!app.currentUser) {
-      alert('You must be logged in to submit feedback.');
+      alert('Please pick a user identity from the toolbar before voting.');
       return;
+    }
+
+    // Calculate vote impact based on voter's Community reputation weight
+    let voterReputation = 0.50;
+    if (typeof CommunityOracle !== 'undefined') {
+      voterReputation = CommunityOracle.getReputationWeight(app.currentUser.id);
     }
 
     const payload = {
       commentId: this.commentNode.id,
       userId: app.currentUser.id,
       sliders: this.sliderValues,
-      feedback: this.feedbackTextarea.value,
+      voterReputation: voterReputation,
+      feedback: this.feedbackTextarea ? this.feedbackTextarea.value : ''
     };
 
     const result = await app.serverAPI.submitRating(payload);
     if (result.success) {
-      alert('Feedback submitted for moderation. Thank you!');
+      // Dynamically adjust comment prominence scaled by reputation
+      const insightDelta = ((this.sliderValues['Insightful'] || 50) - 50) * 0.4 * voterReputation;
+      const newProminence = Math.max(10, Math.min(100, Math.round(this.commentNode.prominence + insightDelta)));
+      this.commentNode.setProminence(newProminence);
+
+      alert(`Rating submitted! Influenced by ${app.currentUser.displayName}'s reputation (${Math.round(voterReputation * 100)}% weight). Prominence updated to ${newProminence}%.`);
       this.hide();
     } else {
-      alert('Error submitting feedback: ' + result.error);
+      alert('Error submitting rating: ' + (result.error || 'Failed'));
     }
   }
-
 }
 
 

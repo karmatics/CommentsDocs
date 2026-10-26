@@ -8,86 +8,46 @@ class CommentsDocs {
   }
 
   async run(env) {
-      if (this.rootElement) {
-        this.destroy();
-      }
+    if (this.rootElement) {
+      this.destroy();
+    }
 
-      if (!env || !env.container) {
-        throw new Error('[CommentsDocs] run() requires an environment object with a valid container.');
-      }
+    if (!env || !env.container) {
+      throw new Error('[CommentsDocs] run() requires an environment container.');
+    }
 
-      this.env = env;
-      this.rootElement = env.container;
+    this.env = env;
+    this.rootElement = env.container;
+    this.rootElement.innerHTML = '';
 
-      this.rootElement.style.overflowY = 'auto';
-      this.rootElement.style.height = 'auto';
-      this.rootElement.style.minHeight = '100vh';
-      this.rootElement.style.boxSizing = 'border-box';
-      this.rootElement.style.transition = 'margin-left 0.25s cubic-bezier(0.2, 0.0, 0.2, 1), width 0.25s cubic-bezier(0.2, 0.0, 0.2, 1)';
+    // Synchronize Community profiles into memory if CommunityOracle exists
+    if (typeof CommunityOracle !== 'undefined') {
+      CommunityOracle.loadProfiles();
+    }
 
-      if (typeof KeyCommandHandler !== 'undefined' && typeof KeyCommandHandler.setPaused === 'function') {
-        KeyCommandHandler.setPaused(true);
-      }
-
-      // Forward-Looking Universal Comments Documentation Suite
-      const pages = [
-        { id: 'overview', title: '0. Architecture & Modern Horizon', docClass: () => globalThis.CommentsOverviewContent },
-        { id: 'styling', title: '1. Styling, Theming & Micro-Threads', docClass: () => globalThis.CommentsStylingContent },
-        { id: 'identity', title: '2. Identity: Anonymous-First & Discriminators', docClass: () => globalThis.CommentsAuthIdentityContent },
-        { id: 'threading', title: '3. Trees, Prominence & Weighted Reputation', docClass: () => globalThis.CommentsThreadingContent },
-        { id: 'api_contract', title: '4. Supabase & Serverless API Contract', docClass: () => globalThis.CommentsApiContractContent },
-        { id: 'dom_anchoring', title: '5. Universal DOM Anchoring & Aardvark', docClass: () => globalThis.CommentsDomAnchorContent },
-        { id: 'ai_moderation', title: '6. AI Moderation & Nuanced Community Coaching', docClass: () => globalThis.CommentsAiModerationContent },
-        { id: 'federation', title: '7. Federation, Shared Reputation & Scale', docClass: () => globalThis.CommentsFederationContent },
-        { id: 'deployment_kit', title: '8. Drop-In Deployment Kit & Prompt Generator', docClass: () => globalThis.CommentsDeploymentKitContent }
-      ];
-
-      // 1. Launch DocumentReader with Comments branding
-      this.reader = new DocumentReader({
-        container: env.container,
-        brandTitle: 'Comments System Architecture',
-        brandIcon: '💬',
-        dossierId: 'CommentsDocs',
-        pages: pages
-      });
-
-      await this.reader.init();
-
-      // 2. Instantiate SidePanel for navigation
-      if (typeof SidePanel !== 'undefined') {
-        this.sidePanel = new SidePanel('left', 340, null);
-        this._buildSidePanelNavigation(pages);
-
-        this._safeAreaHandler = (e) => {
-          const left = e.detail?.left || 0;
-          if (this.rootElement) {
-            this.rootElement.style.marginLeft = `${left}px`;
-            this.rootElement.style.width = left > 0 ? `calc(100% - ${left}px)` : '100%';
-          }
-        };
-        window.addEventListener('layout-safe-area-change', this._safeAreaHandler);
-
-        this.sidePanel.open();
-      }
-
-      // 3. Initialize Aardvark Universal Note Picker
-      if (typeof CadPlanAardvark !== 'undefined') {
-        this.aardvark = new CadPlanAardvark({ container: this.rootElement, dossierId: 'CommentsDocs' });
-        this.aardvark.init();
-      }
-
-      // 4. Setup Header Controls
-      this._setupHeaderToggleButton();
-
+    // Mount the live Comments application
+    if (typeof Comments !== 'undefined') {
+      this.commentsApp = new Comments();
+      await this.commentsApp.run({ container: this.rootElement });
       return this;
     }
 
+    // Fallback: render minimal wrapper
+    const wrap = makeElement('div', {
+      style: { padding: '40px', maxWidth: '840px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }
+    }, [
+      makeElement('h1', { style: { color: '#00f2fe' } }, 'Comments & Community Identity Engine'),
+      makeElement('p', { style: { color: '#94a3b8' } }, 'Comments is initialized and connected to the Community Oracle.')
+    ]);
+    this.rootElement.appendChild(wrap);
+    return this;
+  }
   _buildSidePanelNavigation(pages) {
       if (!this.sidePanel) return;
 
+      globalThis._commentsDocsInstance = this;
       globalThis._cadPlanInstance = this;
 
-      // Header Toolbar
       this.sidePanel.header.innerHTML = '';
       const headerTitle = document.createElement('div');
       headerTitle.style.cssText = 'font-family: var(--cp-font-mono, monospace); font-size: 11px; font-weight: 800; color: #00f2fe; display: flex; align-items: center; gap: 8px; flex: 1;';
@@ -106,7 +66,6 @@ class CommentsDocs {
       container.innerHTML = '';
       container.style.cssText = 'flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; display: flex; flex-direction: column; gap: 10px;';
 
-      // 1. Search & Filter Input Bar
       const searchInput = document.createElement('input');
       searchInput.className = 'cp-sidebar-search';
       searchInput.placeholder = '🔍 Filter chapters, labs, or topics...';
@@ -119,18 +78,16 @@ class CommentsDocs {
       };
       container.appendChild(searchInput);
 
-      // 2. Chapters Accordion Stack
       const chaptersWrapper = document.createElement('div');
       chaptersWrapper.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
 
-      const localMap = (typeof CadPlanItemNotes !== 'undefined') ? CadPlanItemNotes.getLocalMap() : {};
+      const localMap = (typeof CommentsItemNotes !== 'undefined') ? CommentsItemNotes.getLocalMap() : ((typeof CadPlanItemNotes !== 'undefined') ? CadPlanItemNotes.getLocalMap() : {});
 
       pages.forEach((page) => {
         const doc = page.docClass ? page.docClass() : null;
         const manifest = doc?.manifest ? doc.manifest() : [];
         const isCur = page.id === this.activePageId;
 
-        // Note counts for this chapter
         let chapterNotesCount = 0;
         Object.keys(localMap).forEach(k => {
           if (k.includes(`:${page.id}:`)) {
@@ -138,7 +95,6 @@ class CommentsDocs {
           }
         });
 
-        // Detect interactive labs/components
         const hasLab = manifest.some(sec => (sec.blocks || []).some(b => b.type === 'component'));
 
         const card = document.createElement('div');
@@ -164,7 +120,6 @@ class CommentsDocs {
         leftGroup.appendChild(titleText);
         headerRow.appendChild(leftGroup);
 
-        // Badges
         const badgesGroup = document.createElement('div');
         badgesGroup.style.cssText = 'display: flex; gap: 4px; align-items: center; flex-shrink: 0;';
 
@@ -185,7 +140,6 @@ class CommentsDocs {
         headerRow.appendChild(badgesGroup);
         card.appendChild(headerRow);
 
-        // Expandable Sub-Sections
         const sectionsList = document.createElement('div');
         sectionsList.className = 'cp-chapter-sections-list';
         sectionsList.style.display = isCur ? 'flex' : 'none';
@@ -198,7 +152,6 @@ class CommentsDocs {
 
           secItem.onclick = (e) => {
             e.stopPropagation();
-            if (typeof CadPlanItemNotes !== 'undefined') CadPlanItemNotes.playHapticSound('click');
             if (this.activePageId !== page.id) {
               this.selectChapter(page.id);
             }
@@ -214,7 +167,6 @@ class CommentsDocs {
         card.appendChild(sectionsList);
 
         headerRow.onclick = () => {
-          if (typeof CadPlanItemNotes !== 'undefined') CadPlanItemNotes.playHapticSound('click');
           this.selectChapter(page.id);
         };
 
@@ -222,7 +174,6 @@ class CommentsDocs {
       });
       container.appendChild(chaptersWrapper);
 
-      // 3. Settings & Tools Deck
       const settingsDet = document.createElement('details');
       settingsDet.open = true;
       settingsDet.style.cssText = 'margin-top: 10px; border: 1px solid #1e293b; background: #080c16; border-radius: 8px; overflow: hidden;';
@@ -235,7 +186,6 @@ class CommentsDocs {
       const settingsBody = document.createElement('div');
       settingsBody.style.cssText = 'padding: 10px; display: flex; flex-direction: column; gap: 8px; font-family: var(--cp-font-sans); font-size: 11px;';
 
-      // Sound Haptics Toggle
       const soundRow = document.createElement('label');
       soundRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; color: #cbd5e1; cursor: pointer;';
       const isSoundOn = localStorage.getItem('cp_sound_enabled') !== 'false';
@@ -245,12 +195,10 @@ class CommentsDocs {
       soundChk.style.cssText = 'accent-color: #00f2fe; cursor: pointer;';
       soundChk.onchange = (e) => {
         localStorage.setItem('cp_sound_enabled', e.target.checked ? 'true' : 'false');
-        if (typeof CadPlanItemNotes !== 'undefined') CadPlanItemNotes.playHapticSound('accept');
       };
       soundRow.append('Web Audio Haptics:', soundChk);
       settingsBody.appendChild(soundRow);
 
-      // Tools Buttons Grid
       const toolsGrid = document.createElement('div');
       toolsGrid.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;';
 
@@ -264,18 +212,28 @@ class CommentsDocs {
       };
 
       toolsGrid.appendChild(makeToolBtn('Living Spec', '⚡', '#00f2fe', () => {
-        if (typeof CadPlanItemNotes !== 'undefined') CadPlanItemNotes.openPromptBuilderDialog(this.reader);
+        const ItemNotes = globalThis.CommentsItemNotes || globalThis.CadPlanItemNotes;
+        if (ItemNotes) ItemNotes.openPromptBuilderDialog(this.reader);
+      }));
+
+      toolsGrid.appendChild(makeToolBtn('Deploy Kit', '📦', '#38bdf8', () => {
+        this.selectChapter('deployment_kit');
       }));
 
       toolsGrid.appendChild(makeToolBtn('Voice Notes', '🎙️', '#10b981', () => {
-        if (typeof CadPlanNotesManager !== 'undefined') CadPlanNotesManager.openDialog();
+        const NotesMgr = globalThis.CommentsNotesManager || globalThis.CadPlanNotesManager;
+        if (NotesMgr) NotesMgr.openDialog();
+      }));
+
+      toolsGrid.appendChild(makeToolBtn('In-Situ Edit', '✏️', '#c084fc', () => {
+        const DocEd = globalThis.CommentsDocumentEditor || globalThis.CadPlanDocumentEditor;
+        if (DocEd) DocEd.openRevisionManager(() => this.reader.renderCurrentDocument());
       }));
 
       settingsBody.appendChild(toolsGrid);
       settingsDet.appendChild(settingsBody);
       container.appendChild(settingsDet);
     }
-
   selectChapter(pageId) {
       this.activePageId = pageId;
 

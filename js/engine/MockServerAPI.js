@@ -73,68 +73,85 @@ class MockServerAPI {
 
   async _seedInitialData() {
     this.db = { users: [], threads: { main: [] } };
-    this.serverUserManager.reset();
     this.currentUser = null;
 
-    try {
-      const response = await fetch('/Comments/sampleComments.txt');
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch sample comments: ${response.statusText}`
-        );
-      }
-      const text = await response.text();
-      const parsedPosts = await this._parseSampleComments(text);
-
-      const userNames = [...new Set(parsedPosts.map((p) => p.user))];
-      userNames.forEach((name) => this.serverUserManager.getOrCreateUser(name));
-
-      const commentsMap = new Map();
-      const rawComments = parsedPosts.map((post) => {
-        const user = this.db.users.find((u) => u.displayName === post.user);
-        const comment = {
-          id: post.id,
-          userId: user ? user.id : 'unknown',
-          text: post.text,
-          timestamp: post.timestamp,
-          parentId: post.parentId,
-          children: [],
-        };
-        commentsMap.set(comment.id, comment);
-        return comment;
-      });
-
-      const rootComments = [];
-      rawComments.forEach((comment) => {
-        if (comment.parentId) {
-          const parent = commentsMap.get(comment.parentId);
-          if (parent) {
-            parent.children.push(comment);
-          } else {
-            rootComments.push(comment);
-          }
-        } else {
-          rootComments.push(comment);
-        }
-      });
-
-      commentsMap.forEach((c) => delete c.parentId);
-
-      this.db.threads['main'] = rootComments;
-      this.db.users = Array.from(this.serverUserManager.usersById.values());
-
-      console.log(
-        `[MockServerAPI] Seeded ${this.db.users.length} users and ${this.db.threads['main'].length} root comments into 'main' thread.`
-      );
-    } catch (error) {
-      console.error(
-        'Error seeding initial data from sampleComments.txt:',
-        error
-      );
-      this.db.threads['main'] = [];
+    // 1. Synchronize seed users from CommunityOracle
+    if (typeof CommunityOracle !== 'undefined') {
+      const profiles = CommunityOracle.getAllProfiles();
+      this.db.users = profiles.map(p => ({
+        id: p.id,
+        displayName: p.name,
+        normalizedName: p.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+        suffix: p.tag,
+        reputation: p.reputation,
+        badges: p.badges || []
+      }));
+    } else {
+      this.db.users = [
+        { id: 'u_rob', displayName: 'Rob Brown', suffix: 1001, reputation: 0.98, badges: ['Architect', 'Verified'] },
+        { id: 'u_sarah', displayName: 'Sarah', suffix: 1002, reputation: 0.88, badges: ['Top Reviewer'] },
+        { id: 'u_dave1', displayName: 'Dave', suffix: 1042, reputation: 0.72, badges: ['Contributor'] },
+        { id: 'u_dave2', displayName: 'Dave', suffix: 1005, reputation: 0.65, badges: ['Active'] },
+        { id: 'u_alex', displayName: 'Alex', suffix: 1088, reputation: 0.45, badges: ['Probationary'] }
+      ];
     }
-  }
 
+    // 2. Seed threads with authentic community author IDs and PageRank prominence
+    const now = Date.now();
+    this.db.threads['main'] = [
+      {
+        id: 'c_seed_1',
+        userId: 'u_rob',
+        text: 'Welcome to the unified Comments system. Identity and web-of-trust reputation are now governed directly by CommunityOracle.',
+        timestamp: new Date(now - 7200000).toISOString(),
+        prominence: 98,
+        score: 28,
+        children: [
+          {
+            id: 'c_seed_2',
+            userId: 'u_sarah',
+            text: 'Notice that upvotes are weighted by reputation weight. A vote from an Architect carries more prominence than unverified accounts.',
+            timestamp: new Date(now - 5400000).toISOString(),
+            prominence: 88,
+            score: 14,
+            children: []
+          },
+          {
+            id: 'c_seed_3',
+            userId: 'u_dave1',
+            text: 'And our discriminator tags (#1042 vs #1005) prevent identity collision when multiple Daves participate.',
+            timestamp: new Date(now - 3600000).toISOString(),
+            prominence: 72,
+            score: 8,
+            children: [
+              {
+                id: 'c_seed_4',
+                userId: 'u_dave2',
+                text: 'Exactly! Dave #1005 replying right here to Dave #1042.',
+                timestamp: new Date(now - 1800000).toISOString(),
+                prominence: 65,
+                score: 5,
+                children: []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'c_seed_5',
+        userId: 'u_alex',
+        text: 'Probationary comments start slightly subdued until reviewed or affirmed by reputable peers.',
+        timestamp: new Date(now - 900000).toISOString(),
+        prominence: 45,
+        score: 1,
+        children: []
+      }
+    ];
+
+    // Set default active session to Rob Brown
+    this.currentUser = this.db.users[0];
+    console.log(`[MockServerAPI] Initialized with Community identities & ${this.db.threads['main'].length} root threads.`);
+  }
   async getThreadData(threadId = 'main') {
     await this.initialized;
 
